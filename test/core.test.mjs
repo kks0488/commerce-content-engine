@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { normalizeInput, buildMessages, parseBundle, computeMargin, extractProductFromHtml, callLLM, generateBundle, bundleToMarkdown, SAMPLE_PRODUCT, DEMO_BUNDLE, withContentRetry, BUNDLE_JSON_SCHEMA, validateCopy } from '../src/core.js';
+import { normalizeInput, buildMessages, parseBundle, computeMargin, extractProductFromHtml, callLLM, generateBundle, bundleToMarkdown, SAMPLE_PRODUCT, DEMO_BUNDLE, withContentRetry, BUNDLE_JSON_SCHEMA, validateCopy, groundKnownFaq } from '../src/core.js';
 
 test('input validation reports readable errors together and preserves zero cost', () => {
   assert.throws(() => normalizeInput({ price: -1, cost: 'oops' }), error => error.errors.length === 4 && /product_name/.test(error.message) && /product_info/.test(error.message));
@@ -232,4 +232,16 @@ test('repair is limited and does not retry auth errors or cancellation', async (
 
 test('observed unsupported claims trigger validation', () => {
   assert.throws(() => validateCopy({ ads: { bodies: ['스테인리스라 위생적이고 튼튼해요.'] } }, SAMPLE_PRODUCT), /unsupported benefit/);
+});
+
+test('missing-spec FAQ slots use known seller facts without guessing missing performance', () => {
+  const input = normalizeInput({ product_name: '컵', product_info: '용량: 500ml.\n소재: 스테인리스.\n색상: 무광 크림색.\n보온 시간: 미확인', language: 'Korean' });
+  const bundle = structuredClone(DEMO_BUNDLE);
+  bundle.pdp.faq = Array.from({ length: 3 }, () => ({ question: '성능은 어떤가요?', answer: '[확인 필요] 보온 지속 시간' }));
+  groundKnownFaq(bundle, input);
+  assert.deepEqual(bundle.pdp.faq.map(row => row.answer), ['500ml입니다.', '스테인리스입니다.', '무광 크림색입니다.']);
+  assert.doesNotMatch(JSON.stringify(bundle.pdp.faq), /보온|needs info|확인 필요/);
+  const original = structuredClone(DEMO_BUNDLE.pdp.faq);
+  const noLabels = { ...input, product_info: '배송 조건은 아직 모릅니다.' };
+  bundle.pdp.faq = original; groundKnownFaq(bundle, noLabels); assert.deepEqual(bundle.pdp.faq, original);
 });

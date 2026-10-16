@@ -325,6 +325,37 @@ export function validateCopy(bundle, input) {
   return bundle;
 }
 
+// Prefer answerable FAQ entries to a wall of missing-spec notices. Values come
+// verbatim from labeled seller facts; this is source formatting, not an AI claim.
+export function groundKnownFaq(bundle, input) {
+  if (!['Korean', 'English'].includes(input.language)) return bundle;
+  const ko = input.language === 'Korean';
+  const questions = [
+    [/^(?:소재|재질|fabric|material)$/i, ko ? '어떤 소재인가요?' : 'What is it made from?'],
+    [/^(?:용량|capacity)$/i, ko ? '용량은 얼마인가요?' : 'What is the capacity?'],
+    [/^(?:크기|size|dimensions)$/i, ko ? '크기가 어떻게 되나요?' : 'What are the dimensions?'],
+    [/^(?:색상|색상과 마감|color|finish)$/i, ko ? '어떤 색상인가요?' : 'What color is it?'],
+    [/^(?:관리|care)$/i, ko ? '어떻게 관리하나요?' : 'How should I care for it?'],
+  ];
+  const candidates = input.product_info.split(/\n+|;\s*|(?<=[.!?])\s+/u).flatMap(line => {
+    const match = /^([^:：]+)[:：]\s*(.+)$/.exec(line.trim());
+    if (!match || /확인되지|미확인|미제공|unknown|not supplied|not confirmed/i.test(match[2])) return [];
+    const entry = questions.find(([pattern]) => pattern.test(match[1].trim()));
+    if (!entry) return [];
+    const value = match[2].replace(/[.。]$/, '').trim();
+    const care = /^(?:관리|care)$/i.test(match[1].trim());
+    const answer = ko && care ? (/권장$/.test(value) ? value.replace(/\s*권장$/, '을 권장해요.') : value + '해 주세요.')
+      : value + (ko && !/(?:요|다)$/.test(value) ? '입니다.' : '.');
+    return [{ question: entry[1], answer }];
+  });
+  bundle.pdp.faq = bundle.pdp.faq.map(row => {
+    if (!/\[(?:needs info|확인 필요)\]/i.test(row.answer)) return row;
+    const index = candidates.findIndex(candidate => !bundle.pdp.faq.some(other => other.question === candidate.question && !/\[(?:needs info|확인 필요)\]/i.test(other.answer)));
+    return index >= 0 ? candidates.splice(index, 1)[0] : row;
+  });
+  return bundle;
+}
+
 export async function generateBundle(raw, llmOptions = {}) {
   const input = normalizeInput(raw), messages = buildMessages(input);
   const bundle = await withContentRetry((issue, attempt) => callLLM({ ...llmOptions, ...messages,
@@ -334,7 +365,7 @@ export async function generateBundle(raw, llmOptions = {}) {
       ? 'nvidia/nemotron-3-super-120b-a12b' : llmOptions.model,
     jsonSchema: BUNDLE_JSON_SCHEMA, maxTokens: llmOptions.maxTokens || 12000,
     system: messages.system + (issue ? `\nPrevious response failed: ${issue} Rewrite using ONLY concrete input facts; return the complete five-section bundle.` : ''),
-  }), text => validateCopy(parseBundle(text), input), llmOptions);
+  }), text => validateCopy(groundKnownFaq(parseBundle(text), input), input), llmOptions);
   bundle.margin = computeMargin(input);
   return bundle;
 }

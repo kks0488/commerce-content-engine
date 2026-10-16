@@ -25,7 +25,7 @@ flowchart LR
 
 **Nemotron on Nebius**
 
-- Lightning drafts through the Token Factory API with strict JSON Schema and thinking off. Invalid copy gets one Super repair attempt.
+- Lightning drafts through the Token Factory API with strict JSON Schema and thinking off. Invalid copy gets one Super repair attempt; missing FAQ slots use labeled seller facts.
 - On the hosted branch, Super reviews factual claims; the tournament gates ads before simulated buyer comparisons.
 - Built during the hackathon: CLI, browser editor, Fact Guard, tournament, hosted demo and real-response regression checks. AI review uses seller facts and still needs editorial judgment.
 
