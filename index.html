@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Turn verified product facts into a complete commerce content bundle. Bring your own AI key, or try the free sample.">
+  <title>Commerce Content Engine</title>
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="topbar"><a href="./" class="brand"><span class="logo" aria-hidden="true">c<span>e</span></span>commerce<span class="brand-light"> / content engine</span></a><div class="top-actions"><span class="badge" data-i18n="local">Your key. Your content.</span><button id="locale" type="button" aria-label="한국어로 전환">한국어</button></div></header>
+  <main>
+    <section class="hero"><div class="eyebrow" data-i18n="eyebrow">FROM PRODUCT FACTS TO YOUR NEXT LAUNCH</div><h1 data-i18n="hero">One product.<br>A whole lot of possibility.</h1><p data-i18n="intro">Paste the facts. Get a detail page, ads, a video script, and more — in one run.</p><div class="hero-meta"><span data-i18n="byok">Bring your own API key</span><span aria-hidden="true">✦</span><span data-i18n="noInstall">No install. No subscription.</span></div></section>
+    <div class="workspace">
+      <section class="input-panel" aria-labelledby="input-title">
+        <div class="panel-heading"><span class="step">01</span><h2 id="input-title" data-i18n="inputTitle">Your product, in context</h2></div>
+        <form id="product-form" novalidate>
+          <fieldset><legend data-i18n="connection">Connect your AI</legend>
+            <div class="grid two"><label><span data-i18n="provider">Provider</span><select id="provider" name="provider"><option value="openai">OpenAI / Compatible</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option></select></label><label><span data-i18n="model">Model</span><input id="model" name="model" value="gpt-5-mini" required></label></div>
+            <label id="base-row"><span data-i18n="baseUrl">Base URL</span><input id="baseUrl" name="baseUrl" type="url" value="https://api.openai.com/v1"><small data-i18n="baseHelp">OpenAI, OpenRouter, or your local Ollama /v1 endpoint.</small></label>
+            <label><span data-i18n="apiKey">API key</span><div class="key-row"><input id="apiKey" name="apiKey" type="password" autocomplete="off" spellcheck="false" aria-describedby="key-note"><button id="forget" type="button" data-i18n="forget">Forget key</button></div></label>
+            <small id="key-note" data-i18n="keyNote">Stored only in this browser (localStorage), sent only to the provider you chose. A custom base URL receives your key.</small>
+          </fieldset>
+          <fieldset><legend data-i18n="facts">Start with the facts</legend>
+            <label><span data-i18n="name">Product name *</span><input name="product_name" id="product_name" required data-placeholder="nameHint" placeholder="e.g. Moru Daily Tumbler"></label>
+            <label><span data-i18n="info">Product information *</span><textarea name="product_info" id="product_info" rows="6" required data-placeholder="infoHint" placeholder="Materials, features, dimensions, verified benefits, delivery terms…"></textarea></label>
+            <small data-i18n="pasteHelp">Paste facts here. Product URL fetching is available in the CLI.</small>
+          </fieldset>
+          <fieldset><legend data-i18n="direction">Set the direction</legend>
+            <div class="grid two"><label><span data-i18n="language">Output language</span><select name="language" id="language"><option value="Korean">한국어</option><option value="English">English</option><option value="Japanese">日本語</option></select></label><label><span data-i18n="tone">Tone</span><select name="tone"><option value="friendly" data-i18n="friendly">Friendly</option><option value="premium" data-i18n="premium">Premium</option><option value="playful" data-i18n="playful">Playful</option><option value="expert" data-i18n="expert">Expert</option></select></label></div>
+            <label><span data-i18n="channel">Target channel</span><input name="channel" list="channels" value="Naver Smartstore"><datalist id="channels"><option value="Naver Smartstore"><option value="Coupang"><option value="Own website/Shopify"><option value="Amazon"><option value="TikTok Shop"><option value="Instagram"></datalist></label>
+            <label><span data-i18n="customer">Target customer (optional)</span><input name="target_customer" data-placeholder="customerHint" placeholder="Who is this for?"></label>
+            <label><span data-i18n="forbidden">Forbidden claims (optional)</span><input name="forbidden_claims" data-placeholder="forbiddenHint" placeholder="e.g. medical claims, unverified certifications"></label>
+          </fieldset>
+          <fieldset><legend data-i18n="economics">Know your numbers</legend><small data-i18n="moneyHelp">Optional · use the same currency. Calculated locally, never by AI. Fees default to 0%.</small>
+            <div class="grid two"><label><span data-i18n="price">Selling price</span><input name="price" type="number" min="0.01" step="any" inputmode="decimal" placeholder="24000"></label><label><span data-i18n="cost">Product cost</span><input name="cost" type="number" min="0" step="any" inputmode="decimal" placeholder="9000"></label></div>
+            <div class="grid three"><label><span data-i18n="fee">Fee %</span><input name="feePct" type="number" min="0" max="100" step="any" value="0"></label><label><span data-i18n="shipping">Shipping</span><input name="shipping" type="number" min="0" step="any" value="0"></label><label><span data-i18n="adCost">Ads / unit</span><input name="adCost" type="number" min="0" step="any" value="0"></label></div>
+          </fieldset>
+          <div class="form-actions"><button id="generate" class="primary" type="submit" data-i18n="generate">Generate bundle ↗</button><button id="demo" type="button" data-i18n="demo">Try demo (no key)</button></div>
+          <p class="fine-print" data-i18n="guardrail">Grounded in your input. Missing facts are flagged for you to verify.</p>
+        </form>
+      </section>
+      <section class="output-panel" aria-labelledby="output-title" aria-busy="false">
+        <div class="panel-heading"><span class="step">02</span><h2 id="output-title" data-i18n="outputTitle">Your content workspace</h2></div>
+        <div class="export-bar"><span id="output-kind" class="badge" data-i18n="ready">Ready when you are</span><div><button id="copy-all" type="button" disabled data-i18n="copyAll">Copy all as Markdown</button><button id="download" type="button" disabled data-i18n="download">Download .md</button></div></div>
+        <p id="status" role="status" aria-live="polite"></p><p id="error" role="alert" hidden></p>
+        <div id="tabs" class="tabs" role="tablist" aria-label="Content sections"></div>
+        <div id="empty" class="empty-state"><div class="empty-art" aria-hidden="true"><div>✦</div><span> Aa </span><span>▶</span><span>↗</span></div><h3 data-i18n="emptyTitle">Your next launch starts here.</h3><p data-i18n="emptyText">One product becomes six useful views.<br>Try the sample to see it come together.</p><div class="empty-tags"><span>PDP</span><span>ADS</span><span>SHORTS</span><span>+ MORE</span></div></div>
+        <div id="results"></div>
+      </section>
+    </div>
+  </main>
+  <footer><span>commerce-content-engine <span class="muted">v0.1.0 · MIT</span></span><span data-i18n="footer">Made for small teams with big ideas.</span></footer>
+</body>
+</html>
