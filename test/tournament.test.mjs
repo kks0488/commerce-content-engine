@@ -341,3 +341,17 @@ test('NDJSON failures stay private and disconnected requests cancel models', asy
   const failure = JSON.parse(chunks[0]); assert.equal(failure.type, 'error'); assert.match(failure.error, /stopped before completion/i);
   assert.doesNotMatch(JSON.stringify(failure), /Private facts|TEST_ONLY/);
 });
+
+test('placeholder tournament creatives get exactly one repair before the fact gate', async () => {
+  const attempts = new Map();
+  const mock = mockModels({ mutateDraft: (value, payload) => {
+    attempts.set(payload.variation, (attempts.get(payload.variation) || 0) + 1);
+    return attempts.get(payload.variation) === 1 ? { ...value, hook: '[needs info]' } : value;
+  } });
+  const result = await runTournament(product, { apiKey: fakeKey, count: 2, ...models, fetchImpl: mock.fetchImpl });
+  assert.deepEqual([...attempts.values()], [2, 2]);
+  assert.ok(result.winner); assert.doesNotMatch(JSON.stringify(result.variants), /needs info/);
+  const bad = mockModels({ mutateDraft: value => ({ ...value, hook: '[확인 필요]' }) });
+  await assert.rejects(runTournament(product, { apiKey: fakeKey, count: 2, ...models, fetchImpl: bad.fetchImpl }), /Invalid variant text/);
+  assert.equal(bad.calls.filter(call => call.model === models.draftModel).length, 4);
+});

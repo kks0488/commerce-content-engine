@@ -11,14 +11,17 @@ const response = (content, model, extra = {}) => ({ ok: true, status: 200,
 
 function content(headline = 'Test Cup') {
   return {
-    pdp: { headline, subheadline: 'Capacity: 500 ml.', bullets: ['Material: steel.'], description: ['Capacity: 500 ml.'], faq: [] },
-    ads: { headlines: ['Test Cup'], bodies: ['Material: steel.'], keywords: ['Test Cup'] },
-    shorts: { hook: 'Test Cup', scenes: [], cta: 'Test Cup' }, thumbnails: [], listingCheck: [],
+    pdp: { headline, subheadline: 'Capacity: 500 ml.', bullets: Array(5).fill('Material: steel.'), description: Array(3).fill('Capacity: 500 ml.'),
+      faq: Array.from({ length: 3 }, () => ({ question: 'What is the material?', answer: 'Material: steel.' })) },
+    ads: { headlines: Array(3).fill('Test Cup'), bodies: Array(2).fill('Material: steel.'), keywords: ['#Cup', '#Steel', '#500ml'] },
+    shorts: { hook: 'Test Cup', scenes: ['0-3s', '3-12s', '12-23s', '23-35s'].map(time => ({ time, visual: 'Show the cup.', voiceover: 'Material: steel.', caption: 'Test Cup' })), cta: 'Test Cup' },
+    thumbnails: Array.from({ length: 3 }, () => ({ text: 'Test Cup', angle: 'Show the cup.' })),
+    listingCheck: ['high', 'medium', 'low'].map(priority => ({ priority, issue: 'Confirm listing details.', fix: 'Review the supplied facts.' })),
   };
 }
 
 function reviewer(fields, facts, risky = false) {
-  return { claims: fields.map(field => ({ ...field, factual: true,
+  return { claims: fields.map(field => ({ ...field, factual: facts.some(f => f.text === field.claim) || (risky && field.path === 'pdp.headline'),
     status: risky && field.path === 'pdp.headline' ? 'risky' : 'supported',
     sources: facts.filter(f => f.text === field.claim).map(f => ({ id: f.id, quote: f.text })),
     reason: risky && field.path === 'pdp.headline' ? 'No evidence for this guarantee.' : 'Exact seller fact.',
@@ -35,7 +38,7 @@ test('Nebius provider uses official default endpoint, exact model and detailed u
   assert.equal(captured.request.headers.Authorization, `Bearer ${fakeKey}`);
   assert.equal(captured.request.redirect, 'error');
   assert.deepEqual(JSON.parse(captured.request.body), { model: NEMOTRON_MODELS.lightning,
-    messages: [{ role: 'system', content: 'System' }, { role: 'user', content: 'Product' }], max_tokens: 1234, temperature: 0.2,
+    messages: [{ role: 'system', content: 'System' }, { role: 'user', content: 'Product' }], max_tokens: 1234, temperature: 0.6,
     response_format: { type: 'json_object' }, chat_template_kwargs: { enable_thinking: false } });
   assert.deepEqual(result, { text: '{"ok":true}', model: NEMOTRON_MODELS.lightning, usage });
 });
@@ -190,4 +193,27 @@ test('offline demo is clearly labeled and Markdown preserves trace plus routing 
 test('source fact limit rejects oversized fact lists before model access', async () => {
   await assert.rejects(runFactGuard({ ...input, product_info: Array.from({ length: 65 }, (_, i) => `Fact ${i}`).join('\n') }, { apiKey: fakeKey,
     fetchImpl: () => { throw new Error('Must validate before network.'); } }), /up to 64 source facts/);
+});
+
+test('Fact Guard repairs an incomplete draft once before auditing and counts both live calls', async () => {
+  const calls = [];
+  const result = await runFactGuard(input, { apiKey: fakeKey, maxRounds: 0, fetchImpl: async (_url, init) => {
+    const body = JSON.parse(init.body), payload = JSON.parse(body.messages[1].content); calls.push(body);
+    if (calls.length === 1) return response({ pdp: content().pdp }, body.model);
+    return response(payload.fields ? reviewer(payload.fields, payload.facts) : content(), body.model);
+  } });
+  assert.deepEqual(calls.map(c => c.model), [NEMOTRON_MODELS.lightning, NEMOTRON_MODELS.super, NEMOTRON_MODELS.super]);
+  assert.equal(result.ads.headlines.length, 3); assert.equal(result.pdp.faq.length, 3);
+  assert.deepEqual(result.factGuard.steps.map(s => s.step), ['draft', 'draft', 'verify']);
+  assert.equal(result.factGuard.totals.totalTokens, 375);
+  assert.equal(result.factGuard.needsReview, false);
+  assert.equal(calls[0].response_format.type, 'json_schema');
+});
+
+test('Fact Guard rejects repeated incomplete drafts instead of manufacturing placeholders', async () => {
+  let calls = 0;
+  await assert.rejects(runFactGuard(input, { apiKey: fakeKey, fetchImpl: async () => {
+    calls++; return response({ pdp: content().pdp }, NEMOTRON_MODELS.lightning);
+  } }), /Invalid content bundle at ads/);
+  assert.equal(calls, 2);
 });

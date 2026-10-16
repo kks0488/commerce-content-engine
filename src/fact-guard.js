@@ -1,5 +1,5 @@
 // Dependency-free agent pipeline shared by the browser, CLI and serverless route.
-import { normalizeInput, buildMessages, parseBundle, callLLM, computeMargin, jsonObject } from './core.js';
+import { normalizeInput, buildMessages, parseBundle, callLLM, computeMargin, jsonObject, BUNDLE_JSON_SCHEMA, withContentRetry } from './core.js';
 
 export const NEMOTRON_MODELS = Object.freeze({
   lightning: 'nvidia/Nemotron-3_5-Lightning',
@@ -153,14 +153,20 @@ export async function runFactGuard(raw, options = {}) {
       result = { text: response.choices[0].message.content, model, usage: response.usage };
     } else result = await callLLM({ provider: options.provider || 'nebius', apiKey: options.apiKey,
       baseUrl: options.baseUrl, fetchImpl: options.fetchImpl, model, ...messages,
-      maxTokens: name === 'verify' ? 14000 : 6000, detailed: true, timeoutMs: Math.min(90000, remaining), signal: options.signal });
+      maxTokens: name === 'verify' ? 14000 : 12000, jsonSchema: name === 'verify' ? undefined : BUNDLE_JSON_SCHEMA, detailed: true, timeoutMs: Math.min(90000, remaining), signal: options.signal });
     const record = { step: name, round, model: result.model, latencyMs: Math.round(performance.now() - started),
       usage: result.usage, usageEstimated: mode === 'demo', state: 'complete' };
     steps.push(record); options.onProgress?.(record);
     return result.text;
   }
   const messages = buildMessages(input);
-  let bundle = parseBundle(await step('draft', 0, draftModel, messages, () => demoBundle(input, facts)));
+  async function generate(name, round, prompt, fixture) {
+    return withContentRetry((issue, attempt) => step(name, round,
+      attempt && /lightning/i.test(draftModel) ? verifyModel : draftModel,
+      { ...prompt, system: prompt.system + (issue ? `\nPrevious output failed: ${issue} Return the full bundle, grounded only in source facts.` : '') }, fixture),
+      parseBundle, options);
+  }
+  let bundle = await generate('draft', 0, messages, () => demoBundle(input, facts));
   const before = structuredClone(bundle);
   let claims;
   for (let round = 0; round <= maxRounds; round++) {
@@ -171,10 +177,10 @@ export async function runFactGuard(raw, options = {}) {
     const score = scoreClaims(claims);
     history.push({ round, ...score, claims });
     if (!score.needsReview || round === maxRounds) break;
-    bundle = parseBundle(await step('revise', round + 1, draftModel, {
+    bundle = await generate('revise', round + 1, {
       system: messages.system + '\nRevise the entire bundle. Remove or qualify every unsupported/risky claim. Do not add new factual claims. Preserve valid copy. Return the full bundle schema.',
       user: JSON.stringify({ input, facts, bundle, review: claims.filter(c => c.status !== 'supported') }),
-    }, () => demoBundle(input, facts, true)));
+    }, () => demoBundle(input, facts, true));
   }
   const totals = steps.reduce((sum, step) => {
     if (!step.usage || !Number.isFinite(step.usage.total_tokens)) sum.usageComplete = false;
