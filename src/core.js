@@ -1,5 +1,6 @@
 // Shared, dependency-free core. No DOM or Node APIs.
 export const PROVIDERS = {
+  nebius: { model: 'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B', baseUrl: 'https://api.tokenfactory.nebius.com/v1/' },
   openai: { model: 'gpt-5-mini', baseUrl: 'https://api.openai.com/v1' },
   anthropic: { model: 'claude-opus-5-5' },
   gemini: { model: 'gemini-2.5-flash' },
@@ -69,7 +70,7 @@ Do not calculate margins. Schema: ${JSON.stringify(BUNDLE_SCHEMA)}`,
 }
 
 // Balanced scanning respects braces inside strings and accepts surrounding prose/fences.
-function jsonObject(text) {
+export function jsonObject(text) {
   for (let start = text.indexOf('{'); start >= 0; start = text.indexOf('{', start + 1)) {
     let depth = 0, quoted = false, escaped = false;
     for (let i = start; i < text.length; i++) {
@@ -183,7 +184,7 @@ export function extractProductFromHtml(html, url = '') {
   };
 }
 
-export async function callLLM({ provider = 'openai', apiKey = '', model, baseUrl, system, user, fetchImpl = globalThis.fetch } = {}) {
+export async function callLLM({ provider = 'openai', apiKey = '', model, baseUrl, system, user, fetchImpl = globalThis.fetch, detailed = false, timeoutMs = 120000, maxTokens, signal } = {}) {
   const redact = message => {
     let safe = String(message);
     for (const secret of [apiKey, encodeURIComponent(apiKey)]) if (secret) safe = safe.split(secret).join('[redacted]');
@@ -195,12 +196,13 @@ export async function callLLM({ provider = 'openai', apiKey = '', model, baseUrl
     model = str(model) || PROVIDERS[provider].model;
     const headers = { 'Content-Type': 'application/json' };
     let url, body;
-    if (provider === 'openai') {
-      const base = new URL(str(baseUrl) || PROVIDERS.openai.baseUrl);
+    if (provider === 'openai' || provider === 'nebius') {
+      const base = new URL(str(baseUrl) || PROVIDERS[provider].baseUrl);
       if (!/^https?:$/.test(base.protocol) || base.username || base.password || base.search || base.hash) throw new Error('Base URL must be an HTTP(S) endpoint without credentials, query or fragment.');
       url = `${base.href.replace(/\/$/, '')}/chat/completions`;
       headers.Authorization = `Bearer ${apiKey}`;
       body = { model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] };
+      if (provider === 'nebius') Object.assign(body, { max_tokens: maxTokens || 12000, temperature: 0.2 });
     } else if (provider === 'anthropic') {
       url = 'https://api.anthropic.com/v1/messages';
       Object.assign(headers, { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' });
@@ -211,21 +213,25 @@ export async function callLLM({ provider = 'openai', apiKey = '', model, baseUrl
       body = { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { responseMimeType: 'application/json' } };
     }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 120000);
+    const abort = () => controller.abort();
+    if (signal?.aborted) controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    const timer = setTimeout(abort, timeoutMs);
     let response, data;
     try {
       response = await fetchImpl(url, { method: 'POST', headers, body: JSON.stringify(body), signal: controller.signal, redirect: 'error' });
       const text = await response.text();
       try { data = JSON.parse(text); } catch { data = { error: { message: text.slice(0, 400) || 'Empty response' } }; }
-    } finally { clearTimeout(timer); }
+    } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); }
     if (!response.ok) throw new Error(`${provider} HTTP ${response.status}: ${data.error?.message || data.message || 'Request failed'}`);
-    const output = provider === 'openai' ? data.choices?.[0]?.message?.content
+    const output = ['openai', 'nebius'].includes(provider) ? data.choices?.[0]?.message?.content
       : provider === 'anthropic' ? list(data.content).filter(b => b.type === 'text').map(b => b.text).join('\n')
         : list(data.candidates?.[0]?.content?.parts).map(b => b.text || '').join('\n');
     if (!str(output)) throw new Error(`${provider} returned no text. Check the model, token limits or provider safety response.`);
-    return output;
+    if (data.choices?.[0]?.finish_reason === 'length') throw new Error('Model output was truncated. Reduce input size or raise the token budget.');
+    return detailed ? { text: output, usage: data.usage || null, model: data.model || model } : output;
   } catch (error) {
-    throw new Error(redact(error.name === 'AbortError' ? `${provider} request timed out after 120 seconds.` : error.message || 'Provider request failed.'));
+    throw new Error(redact(error.name === 'AbortError' ? `${provider} request timed out or was cancelled (${timeoutMs / 1000}s request limit).` : error.message || 'Provider request failed.'));
   }
 }
 
@@ -255,6 +261,15 @@ export function bundleToMarkdown(bundle, input = {}) {
     for (const [label, value] of [['Selling price', m.price], ['Cost', m.cost], ['Platform fee (%)', m.feePct], ['Platform fee', m.fee], ['Shipping', m.shipping], ['Ad cost per unit', m.adCost], ['Profit before ads', m.profitBeforeAds], ['Unit profit', m.unitProfit], ['Margin (%)', m.marginPct], ['Break-even ROAS (×)', m.breakEvenRoas]]) lines.push(`- ${label}: ${number(value)}`);
     lines.push('', 'Computed locally: profit = price − cost − price × fee% − shipping − ads. Break-even ROAS = price / profit before ads. All money inputs must use the same currency.', ...list(m.warnings).map(v => `> ${v}`));
   } else lines.push('Add selling price and cost to calculate margin. Fees default to 0%; enter your own applicable fee.');
+  if (bundle.factGuard) {
+    const g = bundle.factGuard;
+    const cell = value => String(value ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+    lines.push('', '## Fact Guard', '', `Mode: ${g.mode}. Trust score: ${g.trustScore}/100 (AI assessment, not a guarantee).`,
+      `Review status: ${g.needsReview ? 'Unresolved claims: seller review required' : 'All reviewed factual fields have source citations'}.`, '',
+      '| Claim | Status | Source fact |', '| --- | --- | --- |',
+      ...g.claims.filter(c => c.factual).map(c => `| ${cell(c.claim)} | ${c.status} | ${cell(c.sources.map(s => s.id + ': ' + s.quote).join('; '))} |`),
+      '', '### Routing and usage', '', ...g.steps.map(s => `- ${s.step} (round ${s.round}): ${s.model}; ${s.latencyMs} ms; tokens ${s.usage?.total_tokens ?? 'unavailable'}${g.mode === 'demo' ? ' (fixture estimate; no inference)' : ''}`));
+  }
   return lines.join('\n') + '\n';
 }
 

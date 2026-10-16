@@ -17,8 +17,14 @@
       <section class="input-panel" aria-labelledby="input-title">
         <div class="panel-heading"><span class="step">01</span><h2 id="input-title" data-i18n="inputTitle">Your product, in context</h2></div>
         <form id="product-form" novalidate>
-          <fieldset><legend data-i18n="connection">Connect your AI</legend>
-            <div class="grid two"><label><span data-i18n="provider">Provider</span><select id="provider" name="provider"><option value="openai">OpenAI / Compatible</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option></select></label><label><span data-i18n="model">Model</span><input id="model" name="model" value="gpt-5-mini" required></label></div>
+          <fieldset class="guard-config"><legend>Fact Guard <span class="guard-new">NEMOTRON</span></legend>
+            <label class="guard-toggle"><input id="fact-guard" type="checkbox"><span data-i18n="guardEnable">Verify every claim before you publish</span></label>
+            <p class="guard-route">Nano drafts <span>→</span> Super verifies <span>→</span> Nano revises</p>
+            <label><span data-i18n="verifier">Verification model</span><select id="verifier"><option value="super">Nemotron Super · reasoning</option><option value="ultra">Nemotron Ultra · deeper review (BYO key)</option></select></label>
+            <small id="guard-connection" data-i18n="guardLocal">Use your Nebius key for live inference. Without a key, Fact Guard replays offline fixtures.</small>
+          </fieldset>
+          <fieldset id="connection-fields"><legend data-i18n="connection">Connect your AI</legend>
+            <div class="grid two"><label><span data-i18n="provider">Provider</span><select id="provider" name="provider"><option value="openai">OpenAI / Compatible</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option><option value="nebius">Nebius Token Factory / Nemotron</option></select></label><label><span data-i18n="model">Model</span><input id="model" name="model" value="gpt-5-mini" required></label></div>
             <label id="base-row"><span data-i18n="baseUrl">Base URL</span><input id="baseUrl" name="baseUrl" type="url" value="https://api.openai.com/v1"><small data-i18n="baseHelp">OpenAI, OpenRouter, or your local Ollama /v1 endpoint.</small></label>
             <label><span data-i18n="apiKey">API key</span><div class="key-row"><input id="apiKey" name="apiKey" type="password" autocomplete="off" spellcheck="false" aria-describedby="key-note"><button id="forget" type="button" data-i18n="forget">Forget key</button></div></label>
             <small id="key-note" data-i18n="keyNote">Stored only in this browser (localStorage), sent only to the provider you chose. A custom base URL receives your key.</small>
@@ -46,6 +52,7 @@
         <div class="panel-heading"><span class="step">02</span><h2 id="output-title" data-i18n="outputTitle">Your content workspace</h2></div>
         <div class="export-bar"><span id="output-kind" class="badge" data-i18n="ready">Ready when you are</span><div><button id="copy-all" type="button" disabled data-i18n="copyAll">Copy all as Markdown</button><button id="download" type="button" disabled data-i18n="download">Download .md</button></div></div>
         <p id="status" role="status" aria-live="polite"></p><p id="error" role="alert" hidden></p>
+        <div id="guard-progress" role="status" aria-live="polite" hidden></div>
         <div id="tabs" class="tabs" role="tablist" aria-label="Content sections"></div>
         <div id="empty" class="empty-state"><div class="empty-art" aria-hidden="true"><div>✦</div><span> Aa </span><span>▶</span><span>↗</span></div><h3 data-i18n="emptyTitle">Your next launch starts here.</h3><p data-i18n="emptyText">One product becomes six useful views.<br>Try the sample to see it come together.</p><div class="empty-tags"><span>PDP</span><span>ADS</span><span>SHORTS</span><span>+ MORE</span></div></div>
         <div id="results"></div>

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { DEMO_BUNDLE } from '../src/core.js';
 
 const cli = fileURLToPath(new URL('../cli.mjs', import.meta.url));
-const env = { ...process.env, OPENAI_API_KEY: '', ANTHROPIC_API_KEY: '', GEMINI_API_KEY: '', LLM_API_KEY: '' };
+const env = { ...process.env, OPENAI_API_KEY: '', ANTHROPIC_API_KEY: '', GEMINI_API_KEY: '', NEBIUS_API_KEY: '', LLM_API_KEY: '', LLM_BASE_URL: '', LLM_MODEL: '' };
 const run = args => spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', env });
 test('CLI demo emits full JSON with sample label; Markdown is the default', () => {
   const json = run(['--demo', '--format', 'json']);
@@ -54,4 +54,28 @@ test('CLI fetches URL, merges overrides, generates via compatible API and explai
     const file = await asyncRun(['--file', fileURLToPath(new URL('../examples/sample-product.json', import.meta.url)), '--base-url', `${base}/v1`, '--lang', 'English', '--format', 'json']);
     assert.equal(file.status, 0, file.stderr); assert.equal(JSON.parse(received.messages[1].content).language, 'English');
   } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+// Fact Guard must be useful without credentials and explicit about its offline evidence.
+test('CLI Fact Guard demo and automatic no-key mode expose traces, revisions and model routing', () => {
+  for (const args of [
+    ['--fact-guard', '--demo'],
+    ['--fact-guard', '--name', 'Test Cup', '--info', 'Capacity: 500 ml. Material: steel.', '--lang', 'en'],
+  ]) {
+    const result = run([...args, '--format', 'json']);
+    assert.equal(result.status, 0, result.stderr);
+    const b = JSON.parse(result.stdout);
+    assert.equal(b.factGuard.mode, 'demo');
+    assert.equal(b.factGuard.trustScore, 100);
+    assert.equal(b.factGuard.changes.length, 2);
+    assert.deepEqual(b.factGuard.steps.map(s => s.step), ['draft', 'verify', 'revise', 'verify']);
+    assert.ok(b.factGuard.steps.every(s => s.usageEstimated));
+  }
+  assert.match(run(['--fact-guard', '--demo']).stdout, /## Fact Guard/);
+  assert.equal(run(['--fact-guard', '--demo', '--verifier', 'invalid']).status, 2);
+  assert.match(run(['--help']).stdout, /NEBIUS_API_KEY/);
+  const ultra = JSON.parse(run(['--fact-guard', '--demo', '--verifier', 'ultra', '--format', 'json']).stdout);
+  assert.match(ultra.factGuard.steps[1].model, /Ultra/);
+  const missingKey = run(['--provider', 'nebius', '--name', 'Cup', '--info', 'Steel']);
+  assert.equal(missingKey.status, 1); assert.match(missingKey.stderr, /API key is required/);
 });

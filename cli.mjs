@@ -2,6 +2,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { normalizeInput, extractProductFromHtml, generateBundle, bundleToMarkdown, SAMPLE_PRODUCT, DEMO_BUNDLE, PROVIDERS } from './src/core.js';
 
+import { runFactGuard, FACT_GUARD_SAMPLE, NEMOTRON_MODELS } from './src/fact-guard.js';
+
 const HELP = `commerce-content-engine — one product, a complete content bundle
 
 Usage:
@@ -11,27 +13,29 @@ Usage:
   node cli.mjs --url https://example.com/product --cost 9000
 
 Input:   --url URL  --file product.txt|json  --name TEXT  --info TEXT
-AI:      --provider openai|anthropic|gemini  --model ID  --base-url URL
+AI:      --provider openai|anthropic|gemini|nebius  --model ID  --base-url URL
 Content: --lang Korean|English|Japanese (ko|en|ja)  --channel TEXT
          --tone friendly|premium|playful|expert
          --customer TEXT  --forbidden-claims TEXT
 Margin:  --price N  --cost N  --fee PERCENT  --shipping N  --ad-cost N
-Output:  --format md|json (default md)  --out FILE  --demo  --help
+Output:  --format md|json (default md)  --out FILE  --demo  --fact-guard  --verifier super|ultra  --help
 
-API key: OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY, or LLM_API_KEY.
+API key: OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY / NEBIUS_API_KEY, or LLM_API_KEY.
+Fact Guard: --fact-guard uses Nano -> Super (or --verifier ultra); no key = offline demo.
+LLM_BASE_URL / LLM_MODEL configure a compatible alternative; Nebius is the default for Fact Guard.
 OpenAI-compatible endpoints (OpenRouter, Ollama) use --provider openai --base-url.
 Use the same currency for all amounts. Fees default to 0%; enter your own fee.
-Demo is fixed Korean sample output; content options do not translate it.
+Plain --demo is fixed Korean sample output; Fact Guard fixtures use English template copy.
 Exit codes: 0 success, 1 request/file error, 2 invalid arguments.
 `;
 class ArgumentError extends Error {}
-const valueFlags = new Set(['url', 'file', 'name', 'info', 'provider', 'model', 'base-url', 'lang', 'channel', 'tone', 'price', 'cost', 'fee', 'shipping', 'ad-cost', 'format', 'out', 'customer', 'forbidden-claims']);
+const valueFlags = new Set(['url', 'file', 'name', 'info', 'provider', 'model', 'base-url', 'lang', 'channel', 'tone', 'price', 'cost', 'fee', 'shipping', 'ad-cost', 'format', 'out', 'customer', 'forbidden-claims', 'verifier']);
 function parseArgs(args) {
   const flags = {};
   for (let i = 0; i < args.length; i++) {
     const key = args[i].replace(/^--/, '');
-    if (!args[i].startsWith('--') || (!valueFlags.has(key) && !['help', 'demo'].includes(key))) throw new ArgumentError(`Unknown argument: ${args[i]}. Use --help.`);
-    if (['help', 'demo'].includes(key)) flags[key] = true;
+    if (!args[i].startsWith('--') || (!valueFlags.has(key) && !['help', 'demo', 'fact-guard'].includes(key))) throw new ArgumentError(`Unknown argument: ${args[i]}. Use --help.`);
+    if (['help', 'demo', 'fact-guard'].includes(key)) flags[key] = true;
     else {
       const value = args[++i];
       if (value === undefined || value.startsWith('--')) throw new ArgumentError(`--${key} needs a value.`);
@@ -45,9 +49,13 @@ async function main() {
   const flags = parseArgs(process.argv.slice(2));
   if (flags.help) { process.stdout.write(HELP); return; }
   if (flags.format && !['md', 'json'].includes(flags.format)) throw new ArgumentError('--format must be md or json.');
-  if (flags.provider && !PROVIDERS[flags.provider]) throw new ArgumentError('--provider must be openai, anthropic or gemini.');
+  if (flags.provider && !PROVIDERS[flags.provider]) throw new ArgumentError('--provider must be openai, anthropic, gemini or nebius.');
+  if (flags.verifier && !['super', 'ultra'].includes(flags.verifier)) throw new ArgumentError('--verifier must be super or ultra.');
   let raw = {}, input, bundle;
-  if (flags.demo) { input = SAMPLE_PRODUCT; bundle = DEMO_BUNDLE; }
+  if (flags.demo) {
+    input = flags['fact-guard'] ? FACT_GUARD_SAMPLE : SAMPLE_PRODUCT;
+    bundle = flags['fact-guard'] ? await runFactGuard(input, { demo: true, verifyModel: NEMOTRON_MODELS[flags.verifier || 'super'] }) : DEMO_BUNDLE;
+  }
   else {
     if (flags.file) {
       const text = await readFile(flags.file, 'utf8');
@@ -72,9 +80,14 @@ async function main() {
     const mapping = { name: 'product_name', info: 'product_info', lang: 'language', channel: 'channel', tone: 'tone', customer: 'target_customer', 'forbidden-claims': 'forbidden_claims', price: 'price', cost: 'cost', fee: 'feePct', shipping: 'shipping', 'ad-cost': 'adCost' };
     for (const [flag, key] of Object.entries(mapping)) if (flags[flag] !== undefined) raw[key] = flags[flag];
     try { input = normalizeInput(raw); } catch (error) { throw new ArgumentError(error.message); }
-    const provider = flags.provider || 'openai';
+    const provider = flags.provider || (flags['fact-guard'] ? 'nebius' : 'openai');
     const apiKey = process.env[`${provider.toUpperCase()}_API_KEY`] || process.env.LLM_API_KEY;
-    bundle = await generateBundle(input, { provider, apiKey, model: flags.model, baseUrl: flags['base-url'] });
+    const options = { provider, apiKey, model: flags.model || process.env.LLM_MODEL, baseUrl: flags['base-url'] || process.env.LLM_BASE_URL };
+    if (flags['fact-guard']) {
+      if (!['nebius', 'openai'].includes(provider)) throw new ArgumentError('Fact Guard requires nebius or an OpenAI-compatible provider.');
+      bundle = await runFactGuard(input, { ...options, draftModel: options.model,
+        verifyModel: NEMOTRON_MODELS[flags.verifier || 'super'] });
+    } else bundle = await generateBundle(input, options);
   }
   const output = flags.format === 'json' ? JSON.stringify(bundle, null, 2) + '\n' : bundleToMarkdown(bundle, input);
   if (flags.out) await writeFile(flags.out, output, 'utf8');
@@ -82,7 +95,7 @@ async function main() {
 }
 main().catch(error => {
   let message = error.message;
-  for (const name of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY', 'LLM_API_KEY']) {
+  for (const name of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY', 'NEBIUS_API_KEY', 'LLM_API_KEY']) {
     const key = process.env[name];
     if (key) message = message.split(key).join('[redacted]');
   }

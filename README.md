@@ -1,3 +1,7 @@
+> **Nebius hackathon branch — Fact Guard:** commerce copy with a claim-to-source trace, powered by Nemotron on Nebius Token Factory. [Hosted demo](https://commerce-content-engine-nemotron.vercel.app/) · [Hackathon source branch](https://github.com/kks0488/commerce-content-engine/tree/nebius-nemotron) · [MIT license](LICENSE).
+>
+> **Current status:** the hosted demo uses clearly labeled offline fixtures until `NEBIUS_API_KEY` is configured. No live Nebius inference has been verified. Real screen captures are in [media/](media/); the public YouTube demo is pending owner publication.
+
 <p align="center"><img src="assets/banner.png" alt="Commerce Content Engine" width="100%"></p>
 
 <p align="center">
@@ -12,7 +16,7 @@
 
 <h2 align="center"><strong>Paste one product. Get a detail page, ad copy, a shorts script and thumbnail text in one run.</strong></h2>
 
-For online sellers, small brands, marketers and agencies: bring your own AI key and turn product facts into copy you can review and use. The web app runs in your browser, with no application server storing your inputs or outputs. Requests go directly to your chosen AI provider.
+For online sellers, small brands, marketers and agencies: bring your own AI key and turn product facts into copy you can review and use. The original GitHub Pages app runs in your browser and sends requests directly to your chosen AI provider. The separate hosted Fact Guard demo sends product facts to a serverless route that holds its inference key; it does not persist product inputs or outputs.
 
 <p align="center"><img src="assets/screenshot-workspace.png" alt="Product inputs and the content workspace" width="100%"></p>
 
@@ -26,6 +30,87 @@ For online sellers, small brands, marketers and agencies: bring your own AI key 
     <td><strong>Margin snapshot</strong><br>Unit profit, margin and break-even ROAS computed locally in plain JavaScript, not by AI. Enter your price, cost, fees, shipping and ad spend per unit.</td>
   </tr>
 </table>
+
+## Nemotron on Nebius Token Factory
+
+**Problem:** invented specifications, certifications and performance promises can lead to returns and rejected listings. Sellers need to see which supplied fact supports each line of generated copy.
+
+**Solution:** Fact Guard turns a seller's facts into a complete commerce bundle, independently audits every text field, revises unsupported or risky statements, then audits the revised bundle. It keeps the draft, final copy, verification history and exact source quotes visible. The score is the percentage of reviewed factual fields with valid citations; creative text and instructions are excluded. It measures an AI assessment against seller input, not objective truth or legal compliance. A compound field must have all its assertions supported. Missing reviews, duplicate paths, mismatched copy, absent citations and invented quotes fail closed.
+
+The model IDs below were verified against the [official public catalogue](https://tokenfactory.nebius.com/api/public/models_info) on October 16, 2026:
+
+| Role | Exact model ID | Routing rationale |
+| --- | --- | --- |
+| Draft + revise | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Smaller model handles content generation and targeted revisions |
+| Verify (default) | `nvidia/nemotron-3-super-120b-a12b` | Larger reasoning model checks all assertions and citations |
+| Verify (optional) | `nvidia/Nemotron-3-Ultra-550b-a55b` | Available through CLI/BYO-key verifier selector or server configuration |
+
+All requests use the OpenAI-compatible `https://api.tokenfactory.nebius.com/v1/chat/completions` endpoint and bearer authentication, as documented in the [quickstart](https://docs.tokenfactory.nebius.com/quickstart). [Public endpoints route globally](https://docs.tokenfactory.nebius.com/public-serverless); no fixed region is assumed. The implementation uses JSON instructions and validates/parses responses rather than assuming that every model supports constrained JSON mode.
+
+```mermaid
+flowchart LR
+  S[Seller facts] --> A[Browser or CLI]
+  A --> H[Hosted serverless route or BYO-key client]
+  H --> N[Nemotron Nano: draft]
+  N --> V[Nemotron Super or Ultra: verify]
+  S --> V
+  V -->|unsupported or risky; at most 2 revisions| R[Nemotron Nano: revise]
+  R --> V
+  V --> T[Fact trace + trust score + before/after]
+  H -. No key .-> D[Labeled offline schema-compatible fixtures]
+```
+
+Each step records the actual response model, wall-clock latency and provider-reported token usage. No price/savings benchmark is claimed: routing counts are visible so judges can assess the approach. Offline replay uses documented [Chat Completion envelopes](https://docs.tokenfactory.nebius.com/api-reference/inference/create-chat-completion) with **estimated** token counts and local replay times; these are not inference measurements. The demonstration intentionally injects one unsupported heat-retention claim and one risky medical claim, then removes them. It is not evidence that a real model produced or detected these errors. Offline copy is English template text (seller facts remain as entered); chosen output languages are honored by live prompts.
+
+### Run Fact Guard
+
+No packages need installing. Use Node.js 18+ (Node 22 recommended).
+
+```sh
+# Offline CLI fixture: full bundle plus factGuard metadata
+node cli.mjs --fact-guard --demo --format json
+
+# Offline or live browser + same serverless handler
+npm run dev
+# Open http://localhost:8080/?fact-guard
+
+# Live mode: set NEBIUS_API_KEY in your shell, then restart npm run dev.
+# Obtain the key yourself; .env.example lists empty configuration fields.
+# The app intentionally does not automatically load .env files.
+node cli.mjs --fact-guard --name "Everyday Steel Cup" \
+  --info "Capacity: 500 ml. Material: stainless steel. Hand wash recommended." \
+  --lang en --format json
+
+# Optional larger verifier
+node cli.mjs --fact-guard --verifier ultra --file examples/sample-product.json
+
+npm test
+npm run build
+```
+
+`NEBIUS_API_KEY` automatically enables live mode in the hosted endpoint and Fact Guard CLI. An invalid key or failed live call returns an error; it never silently switches to fixtures. `--demo` explicitly forces fixtures. Generic `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` support an OpenAI-compatible alternative; that alternative does not by itself satisfy the Nebius hackathon runtime requirement. `NEBIUS_DRAFT_MODEL` and `NEBIUS_VERIFY_MODEL` override hosted routing. On static GitHub Pages, select **Nebius Token Factory / Nemotron** and enable **Fact Guard** to use your own key directly. Plain single-model generation also supports the `nebius` provider.
+
+### Separate hosted project
+
+The project is `commerce-content-engine-nemotron`; the original Pages deployment is unaffected. The Vercel build copies only public files into `out/`; the serverless function imports the shared core. Deploy from this branch:
+
+```sh
+vercel --prod --yes --project commerce-content-engine-nemotron
+```
+
+Add `NEBIUS_API_KEY` through the Vercel environment-variable UI (Production), then redeploy. Keys stay in the function environment and never reach the browser. `GET /api/fact-guard` reports only mode and model names. `POST` accepts product fields only; users cannot override keys, models, upstream URLs or round limits. Bounds: 16 KB JSON, 160-character name, 8,000-character facts, 64 fact segments, five runs per IP per ten minutes, two revisions and a 280-second total pipeline budget. Request timeouts bound live work. Rate limiting is **in-memory per warm function instance**, so cold starts/multiple instances reset it; use a distributed quota before opening sustained paid traffic. No usage-based add-ons or paid services are provisioned.
+
+### What was built during the hackathon
+
+This is an extension of the existing MIT Commerce Content Engine, not a claim that the original app was created during this hackathon. The existing baseline supplied the dependency-free browser, CLI, bundle schema, margin calculation and CI. The `nebius-nemotron` branch adds the Nebius provider; Nano → Super/Ultra → Nano agent orchestration; complete field coverage and verbatim source validation; trust scoring, history, before/after and step metrics; deterministic offline API-schema fixtures; the serverless endpoint and limits; separate Vercel configuration; focused tests and real Playwright screen captures. Main is not merged.
+
+### Submission readiness and sponsor feedback
+
+Track: **Best Apps and Agents**. The [official rules](https://nebiusglobalaihackathon.devpost.com/rules) permit existing projects with significant in-period updates and a written explanation. Deadline: **October 30, 2026, 10:00 PDT**. Tracks are Coding and Agentic Engineering, Best Apps and Agents, Personal AI, and Physical AI. Required submission items: working Nebius/NVIDIA project, chosen track, English description, working demo URL, public repository with visible OSS license and run instructions, public YouTube video **under three minutes**, existing-project explanation, and feedback on Nebius/NVIDIA tools. The [resources](https://nebiusglobalaihackathon.devpost.com/resources) provide optional credit-registration links; this job does not register or submit anything.
+
+Owner actions remaining: supply a Nebius key and verify real Nano/Super requests, publish the final YouTube video using the captured screens, and submit the materials on Devpost. Keep judge access free and public through judging. No final video or Devpost submission is claimed here.
+
+Feedback from integration without a key: the common endpoint and Chat Completion schema allow sharing one small dependency-free adapter across CLI/browser/server; exact model IDs have different capitalization, so the public catalogue is valuable. A public per-model structured-output capability flag would make portable client setup clearer. Live model quality, throughput, latency and reliability feedback remain pending real inference; fixture performance is not sponsor-performance evidence.
 
 ## Try it in 10 seconds
 
@@ -151,7 +236,7 @@ Margin math runs in plain JavaScript and replaces any margin returned by the mod
 
 ## Privacy
 
-Your API key stays in this browser's `localStorage` and is sent only to the chosen provider when generating. **Forget key** removes the saved key for the currently selected provider/endpoint. Product facts, directions and entered financial fields are sent to that provider for generation; the app has no backend storage, analytics or tracking scripts. The provider's own data policies apply. Copy and Markdown downloads happen in the browser.
+In the original BYO-key app, your API key stays in this browser's `localStorage` and is sent only to the chosen provider when generating. **Forget key** removes the saved key for the currently selected provider/endpoint. Product facts, directions and entered financial fields are sent to that provider for generation; the app does not persist generated content or include analytics or tracking scripts. In the hosted demo, product facts and directions pass through the serverless route to Nebius when a server key is configured; the owner key stays server-side. Hosting and provider service logs may still contain request metadata. The provider's own data policies apply. Copy and Markdown downloads happen in the browser.
 
 **A custom Base URL receives your key.** Enter only an endpoint you trust. Demo mode makes no AI request.
 
@@ -167,6 +252,11 @@ commerce-content-engine/
 ├── app.js                    # UI, key storage and export
 ├── cli.mjs                   # CLI and product URL fetching
 ├── src/core.js               # Providers, prompts, parsing and margin math
+├── src/fact-guard.js         # Nemotron orchestration, citations and demo fixtures
+├── api/fact-guard.js         # Hosted key, limits and automatic demo/live mode
+├── scripts/                 # Dependency-free local server and public-file build
+├── media/                   # Real pilot browser captures
+├── vercel.json              # Separate hosted deployment
 ├── examples/                 # Fictional sample input and output
 ├── test/                     # Core and CLI tests
 ├── package.json              # Commands and Node requirement

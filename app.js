@@ -1,8 +1,22 @@
 import { PROVIDERS, normalizeInput, generateBundle, bundleToMarkdown, SAMPLE_PRODUCT, DEMO_BUNDLE } from './src/core.js';
 
+import { runFactGuard, NEMOTRON_MODELS, FACT_GUARD_SAMPLE } from './src/fact-guard.js';
+
 // All interface copy lives here; generated product copy keeps its chosen output language.
 const UI = {
   en: {
+    factGuard: 'Fact Guard', guardEnable: 'Verify every claim before you publish', verifier: 'Verification model',
+    guardLocal: 'Use your Nebius key for live inference. Without a key, Fact Guard replays offline fixtures.',
+    guardHosted: 'Hosted demo · no personal key needed. Your facts go to this server; live inference uses its server-side key.',
+    guardRun: 'Draft + verify with Nemotron ↗', guardDemo: 'Try Fact Guard demo (no key)',
+    guardHero: 'Good copy.\nClaims you can trace.', guardIntro: 'Turn seller facts into launch content. Catch invented claims, revise them, and see the evidence behind every line.',
+    guardEyebrow: 'FACT-GUARDED COMMERCE · NEMOTRON ON NEBIUS', guardAwait: 'Running draft → verify → revise. The final trace appears when verification finishes.',
+    guardScore: 'Trust score', guardScoreNote: 'Share of reviewed factual fields with valid citations. AI assessment of seller-supplied facts; review before publishing.',
+    guardSteps: 'Efficient routing', guardTrace: 'Final fact trace', guardDiff: 'Before / after', guardInitial: 'What the verifier caught',
+    guardClean: 'All reviewed factual fields have source citations.', guardReview: 'Unresolved claims remain. Seller review required.',
+    guardNoResult: 'Enable Fact Guard and run the pipeline to see claim verification, source facts and revisions.',
+    guardClaim: 'Claim / content field', guardStatus: 'Status', guardSource: 'Source fact', guardCreative: 'Creative text / instructions (not scored)',
+
     local: 'Your key. Your content.', eyebrow: 'FROM PRODUCT FACTS TO YOUR NEXT LAUNCH', hero: 'One product.\nA whole lot of possibility.',
     intro: 'Paste the facts. Get a detail page, ads, a video script, and more — in one run.', byok: 'Bring your own API key', noInstall: 'No install. No subscription.',
     inputTitle: 'Your product, in context', connection: 'Connect your AI', provider: 'Provider', model: 'Model', baseUrl: 'Base URL', baseHelp: 'OpenAI, OpenRouter, or your local Ollama /v1 endpoint.',
@@ -19,6 +33,18 @@ const UI = {
     lowMargin: 'Margin is below 15%. Review costs before scaling ads.', noProfit: 'Zero or negative unit profit.', noRoas: 'Break-even ROAS is unavailable when profit before ads is zero or negative.', switchLanguage: '한국어로 전환', tabsLabel: 'Content sections',
   },
   ko: {
+    factGuard: '사실 확인', guardEnable: '게시 전에 모든 주장 확인하기', verifier: '검증 모델',
+    guardLocal: 'Nebius 키를 입력하면 실제 모델을 사용합니다. 키가 없으면 샘플로 흐름을 보여 드려요.',
+    guardHosted: '개인 키 없이 체험하세요. 상품 정보는 서버로 전송되며, 실제 생성에는 서버의 키를 사용합니다.',
+    guardRun: '작성하고 사실 확인하기 ↗', guardDemo: '키 없이 사실 확인 체험',
+    guardHero: '판매 문구에도,\n확인할 수 있는 근거를.', guardIntro: '상품 정보로 콘텐츠를 만들고, 근거 없는 표현을 고친 뒤 문장마다 출처를 확인하세요.',
+    guardEyebrow: '상품 문구 사실 확인 · NEMOTRON ON NEBIUS', guardAwait: '작성 → 검증 → 수정 중이에요. 끝나면 확인 결과를 보여 드립니다.',
+    guardScore: '근거 확인 점수', guardScoreNote: '검토한 상품 설명 중 유효한 출처가 있는 비율입니다. 입력 정보에 대한 AI의 판단이므로 게시 전에 확인해 주세요.',
+    guardSteps: '단계별 모델 사용', guardTrace: '최종 근거 표', guardDiff: '수정 전 / 후', guardInitial: '처음에 발견한 문제',
+    guardClean: '검토한 상품 설명에 모두 출처가 있어요.', guardReview: '확인하지 못한 표현이 남아 있어요. 판매자가 검토해 주세요.',
+    guardNoResult: '사실 확인을 켜고 실행하면 근거와 수정 내역을 볼 수 있어요.',
+    guardClaim: '문구 / 항목', guardStatus: '판정', guardSource: '입력한 근거', guardCreative: '홍보 표현 / 안내 (점수 제외)',
+
     local: '내 키로 만드는 내 콘텐츠', eyebrow: '상품 정보에서 판매 콘텐츠까지', hero: '상품 하나로,\n가능성은 더 넓게.', intro: '상품 정보를 붙여 넣으세요. 상세페이지, 광고, 영상 대본까지 한 번에 만듭니다.', byok: '내 API 키로 사용', noInstall: '설치 없이, 구독 없이.',
     inputTitle: '어떤 상품인가요?', connection: 'AI 연결', provider: 'AI 서비스', model: '모델', baseUrl: 'API 주소', baseHelp: 'OpenAI, OpenRouter 또는 로컬 Ollama /v1 주소를 입력하세요.', apiKey: 'API 키', forget: '키 지우기', keyNote: '키는 이 브라우저(localStorage)에만 저장되며 선택한 서비스로만 전송됩니다. 별도 API 주소를 입력하면 해당 주소로 전송됩니다.',
     facts: '상품 정보', name: '상품명 *', info: '상품 설명 *', nameHint: '예: 모루 데일리 텀블러', infoHint: '소재, 특징, 크기, 확인된 성능, 배송 조건 등을 적어 주세요.', pasteHelp: '상품 정보를 붙여 넣으세요. URL 가져오기는 CLI에서 지원합니다.', direction: '콘텐츠 방향', language: '출력 언어', tone: '말투', friendly: '친근하게', premium: '고급스럽게', playful: '재치 있게', expert: '전문적으로', channel: '판매 채널', customer: '대상 고객 (선택)', customerHint: '누구를 위한 상품인가요?', forbidden: '금지할 표현 (선택)', forbiddenHint: '예: 의료 효능, 확인되지 않은 인증',
@@ -29,8 +55,9 @@ const UI = {
 };
 const $ = selector => document.querySelector(selector);
 const form = $('#product-form');
-let locale = 'en', bundle = null, snapshot = null, active = 'pdp', busy = false;
-const sections = ['pdp', 'ads', 'shorts', 'thumbnails', 'listingCheck', 'margin'];
+let locale = 'en', bundle = null, snapshot = null, active = 'pdp', busy = false, hosted = false, hostedMode = 'demo';
+let guardEnabled = new URLSearchParams(location.search).has('fact-guard') || location.hostname.includes('nemotron');
+const sections = ['pdp', 'ads', 'shorts', 'thumbnails', 'listingCheck', 'margin', 'factGuard'];
 const t = key => UI[locale][key] || key;
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const p = value => `<p>${escape(value)}</p>`;
@@ -66,7 +93,7 @@ function applyLocale() {
   $('#locale').setAttribute('aria-label', t('switchLanguage'));
   $('#tabs').setAttribute('aria-label', t('tabsLabel'));
   $('#status').textContent = busy ? t('loading') : '';
-  render();
+  updateGuard(); render();
 }
 $('#locale').addEventListener('click', () => { locale = locale === 'en' ? 'ko' : 'en'; applyLocale(); });
 
@@ -80,11 +107,12 @@ function render() {
   $('#tabs').innerHTML = sections.map(key => `<button type="button" id="tab-${key}" role="tab" aria-selected="${active === key}" aria-controls="panel-${key}" tabindex="${active === key ? 0 : -1}" data-tab="${key}">${escape(t(key))}</button>`).join('');
   $('#empty').hidden = !!bundle;
   $('#copy-all').disabled = $('#download').disabled = !bundle || busy;
-  $('#output-kind').textContent = bundle ? t(bundle.sample ? 'sample' : 'generated') : t('ready');
+  $('#output-kind').textContent = bundle?.factGuard ? `${bundle.factGuard.mode.toUpperCase()} · Nemotron Fact Guard` : bundle ? t(bundle.sample ? 'sample' : 'generated') : t('ready');
   if (!bundle) { $('#results').innerHTML = ''; return; }
   copies = [];
   const b = bundle;
   const panels = {
+    factGuard: () => renderGuard(b.factGuard),
     pdp: () => card(t('headline'), `<h4 class="big-headline">${escape(b.pdp.headline)}</h4>${p(b.pdp.subheadline)}`, `${b.pdp.headline}\n${b.pdp.subheadline}`)
       + card(t('bullets'), ul(b.pdp.bullets), b.pdp.bullets.join('\n'))
       + card(t('description'), b.pdp.description.map(p).join(''), b.pdp.description.join('\n\n'))
@@ -134,11 +162,22 @@ $('#download').addEventListener('click', () => {
 function setBusy(value) {
   busy = value;
   form.querySelectorAll('fieldset, button').forEach(el => { el.disabled = value; });
+  if (!value) updateGuard();
   $('.output-panel').setAttribute('aria-busy', String(value));
   $('#status').textContent = value ? t('loading') : '';
   render();
 }
-$('#demo').addEventListener('click', () => {
+$('#demo').addEventListener('click', async () => {
+  if (guardEnabled) {
+    $('#error').hidden = true; setBusy(true);
+    try {
+      for (const [key, value] of Object.entries(FACT_GUARD_SAMPLE)) if (form.elements.namedItem(key)) form.elements.namedItem(key).value = value;
+      snapshot = { ...FACT_GUARD_SAMPLE };
+      bundle = await runFactGuard(snapshot, { demo: true, onProgress: guardProgress });
+      active = 'factGuard'; setBusy(false); $('#guard-progress').hidden = true;
+    } catch (error) { setBusy(false); $('#error').textContent = error.message; $('#error').hidden = false; }
+    return;
+  }
   $('#error').hidden = true;
   for (const [key, value] of Object.entries(SAMPLE_PRODUCT)) if (form.elements.namedItem(key)) form.elements.namedItem(key).value = value;
   snapshot = { ...SAMPLE_PRODUCT }; bundle = structuredClone(DEMO_BUNDLE); active = 'pdp'; render(); $('#status').textContent = '';
@@ -149,11 +188,68 @@ form.addEventListener('submit', async event => {
   try {
     const raw = Object.fromEntries(new FormData(form));
     const input = normalizeInput(raw); saveKey(); setBusy(true);
-    const result = await generateBundle(input, { provider: raw.provider, apiKey: raw.apiKey, model: raw.model, baseUrl: raw.baseUrl });
-    bundle = result; snapshot = input; active = 'pdp';
+    let result;
+    if (guardEnabled) {
+      guardProgress({ state: 'running' });
+      if (hosted) {
+        const response = await fetch('/api/fact-guard', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(input), signal: AbortSignal.timeout(295000) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Fact Guard request failed.');
+        result = data;
+      } else result = await runFactGuard(input, { apiKey: raw.apiKey, draftModel: raw.model,
+        verifyModel: NEMOTRON_MODELS[$('#verifier').value], onProgress: guardProgress });
+    } else result = await generateBundle(input, { provider: raw.provider, apiKey: raw.apiKey, model: raw.model, baseUrl: raw.baseUrl });
+    bundle = result; snapshot = input; active = guardEnabled ? 'factGuard' : 'pdp';
+    $('#guard-progress').hidden = true;
     setBusy(false); $('#status').textContent = t('done');
   } catch (error) {
-    setBusy(false); $('#error').textContent = error.message; $('#error').hidden = false;
+    setBusy(false); $('#guard-progress').hidden = true; $('#error').textContent = error.message; $('#error').hidden = false;
   }
 });
+function guardProgress(event) {
+  $('#guard-progress').hidden = false;
+  $('#guard-progress').textContent = event.step ? `${event.step.toUpperCase()} · ${event.model} · ${event.state}` : t('guardAwait');
+}
+function updateGuard() {
+  $('#fact-guard').checked = guardEnabled;
+  document.body.classList.toggle('fact-guard-mode', guardEnabled);
+  $('#connection-fields').hidden = guardEnabled && hosted;
+  $('#verifier').disabled = hosted || busy;
+  $('#provider').disabled = guardEnabled;
+  $('#guard-connection').textContent = t(hosted ? 'guardHosted' : 'guardLocal') + (hosted ? ` ${hostedMode.toUpperCase()}` : '');
+  $('#generate').textContent = t(guardEnabled ? 'guardRun' : 'generate');
+  $('#demo').textContent = t(guardEnabled ? 'guardDemo' : 'demo');
+  if (guardEnabled) {
+    $('.hero h1').textContent = t('guardHero'); $('.hero > p').textContent = t('guardIntro');
+    $('.hero .eyebrow').textContent = t('guardEyebrow');
+    if (!hosted && $('#provider').value !== 'nebius') { $('#provider').value = 'nebius'; updateProvider(); }
+  } else {
+    $('.hero h1').textContent = t('hero'); $('.hero > p').textContent = t('intro'); $('.hero .eyebrow').textContent = t('eyebrow');
+  }
+}
+$('#fact-guard').addEventListener('change', () => { guardEnabled = $('#fact-guard').checked; updateGuard(); });
+function renderGuard(g) {
+  if (!g) return card('Fact Guard', p(t('guardNoResult')), t('guardNoResult'));
+  const factual = g.claims.filter(c => c.factual);
+  const table = claims => `<div class="trace-scroll"><table class="trace-table"><thead><tr><th>${escape(t('guardClaim'))}</th><th>${escape(t('guardStatus'))}</th><th>${escape(t('guardSource'))}</th></tr></thead><tbody>${claims.map(c => `<tr><td>${escape(c.claim)}<small>${escape(c.path)}</small></td><td><span class="claim-status ${escape(c.status)}">${escape(c.status)}</span><small>${escape(c.reason)}</small></td><td>${c.sources.length ? c.sources.map(s => `<span class="fact-id">${escape(s.id)}</span> ${escape(s.quote)}`).join('<br>') : '—'}</td></tr>`).join('')}</tbody></table></div>`;
+  const initial = g.history[0].claims.filter(c => c.status !== 'supported');
+  return `<div class="guard-verdict"><div><span>${escape(t('guardScore'))}</span><strong>${g.trustScore}<small>/100</small></strong></div><div><span class="mode-pill">${escape(g.mode.toUpperCase())}${g.mode === 'demo' ? ' · OFFLINE FIXTURES' : ' · TOKEN FACTORY'}</span><h3>${escape(t(g.needsReview ? 'guardReview' : 'guardClean'))}</h3><p>${escape(t('guardScoreNote'))}</p></div></div>
+    <p class="guard-notice">${escape(g.notice)}</p>
+    <h3 class="guard-section-title">${escape(t('guardSteps'))}</h3><div class="pipeline-steps">${g.steps.map(s => `<article><span class="pipeline-step">${escape(s.step)} <small>R${s.round}</small></span><strong title="${escape(s.model)}">Nemotron ${s.model.toLowerCase().includes('nano') ? 'Nano' : s.model.toLowerCase().includes('ultra') ? 'Ultra' : 'Super'}</strong><span>${s.latencyMs} ms · ${s.usage?.total_tokens ?? '—'} tokens${s.usageEstimated ? ' (est.)' : ''}</span></article>`).join('')}</div>
+    <p class="routing-total">${g.totals.totalTokens.toLocaleString()} ${g.mode === 'demo' ? 'estimated fixture' : 'reported'} tokens · ${g.totals.latencyMs} ms ${g.mode === 'demo' ? 'local replay' : 'model requests'}${g.totals.usageComplete ? '' : ' · usage incomplete'}. Nano handles drafting and revision; the larger model audits claims.</p>
+    <h3 class="guard-section-title">${escape(t('guardDiff'))}</h3>${g.changes.length ? g.changes.map(c => `<div class="claim-diff"><small>${escape(c.path)}</small><del>${escape(c.before)}</del><ins>${escape(c.after)}</ins></div>`).join('') : p('No revisions made.')}
+    ${initial.length ? `<details class="guard-initial" open><summary>${escape(t('guardInitial'))} · ${initial.length}</summary>${table(initial)}</details>` : ''}
+    <h3 class="guard-section-title">${escape(t('guardTrace'))} <span>${factual.length} fields</span></h3>${table(factual)}
+    <details class="guard-initial"><summary>${escape(t('guardCreative'))} · ${g.claims.length - factual.length}</summary>${table(g.claims.filter(c => !c.factual))}</details>
+    <details class="guard-initial"><summary>Seller source facts · ${g.facts.length}</summary>${g.facts.map(f => p(`${f.id} · ${f.text}`)).join('')}</details>`;
+}
 loadKey(); applyLocale();
+// Static GitHub Pages keeps BYO-key mode. Only a valid same-origin API enables hosted mode.
+fetch('/api/fact-guard', { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? r.json() : null).then(data => {
+  if (data && ['demo', 'live'].includes(data.mode) && data.models) {
+    hosted = true; hostedMode = data.mode; guardEnabled = true;
+    $('#verifier').value = data.models.verify === NEMOTRON_MODELS.ultra ? 'ultra' : 'super';
+    updateGuard();
+  }
+}).catch(() => {});
