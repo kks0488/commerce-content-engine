@@ -283,3 +283,9 @@ test('observed live native-copy failures are rejected including seller instructi
   assert.throws(() => validateCopy({ pdp: { description: ['스테인리스 소재의 단단함을 느껴요.'] } }, SAMPLE_PRODUCT), /unsupported benefit/);
   assert.throws(() => validateCopy({ pdp: { description: ['분리형 뚜껑을 쪼개 씻어요.'] } }, SAMPLE_PRODUCT), /lid instruction/);
 });
+
+test('editorial gate rejects observed demonstration notes and obvious location hooks', () => {
+  assert.throws(() => validateCopy({ pdp: { bullets: ['손끝으로 둥근 선을 짚어 볼 수 있어요.'] } }, SAMPLE_PRODUCT), /editorial copy/);
+  assert.throws(() => validateCopy({ shorts: { hook: '오늘 채소, 어디서 썰죠?' } }, SAMPLE_PRODUCT), /weak hook/);
+  assert.throws(() => validateCopy({ pdp: { bullets: ['넓은 입구로 물을 붓는 장면'] } }, SAMPLE_PRODUCT), /internal scene note/);
+});
