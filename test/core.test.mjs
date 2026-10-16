@@ -289,3 +289,7 @@ test('editorial gate rejects observed demonstration notes and obvious location h
   assert.throws(() => validateCopy({ shorts: { hook: '오늘 채소, 어디서 썰죠?' } }, SAMPLE_PRODUCT), /weak hook/);
   assert.throws(() => validateCopy({ pdp: { bullets: ['넓은 입구로 물을 붓는 장면'] } }, SAMPLE_PRODUCT), /internal scene note/);
 });
+
+test('wide opening does not establish hand clearance', () => {
+  assert.throws(() => validateCopy({ pdp: { bullets: ['넓은 입구라 얼음을 넣을 때 손이 걸리지 않아요'] } }, SAMPLE_PRODUCT), /hand-clearance/);
+});
