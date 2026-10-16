@@ -275,3 +275,11 @@ test('repair feedback includes every independent rubric failure and rejects mixe
     assert.throws(() => validateCopy({ ads: { bodies: [claim] } }, { ...input, language: 'English' }), /leakage/);
   }
 });
+
+test('observed live native-copy failures are rejected including seller instructions', () => {
+  for (const value of ['뚜껑는 어떻게 씻나요?', '깨끗히 관리해요', '배송 기간와 반품 조건을 안내하세요.', '500ml 음기를 부어요.']) {
+    assert.throws(() => validateCopy({ listingCheck: [{ issue: value, priority: 'high' }] }, SAMPLE_PRODUCT), /native Korean/);
+  }
+  assert.throws(() => validateCopy({ pdp: { description: ['스테인리스 소재의 단단함을 느껴요.'] } }, SAMPLE_PRODUCT), /unsupported benefit/);
+  assert.throws(() => validateCopy({ pdp: { description: ['분리형 뚜껑을 쪼개 씻어요.'] } }, SAMPLE_PRODUCT), /lid instruction/);
+});
