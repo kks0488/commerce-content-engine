@@ -8,11 +8,36 @@
   <title>Commerce Content Engine</title>
   <link rel="stylesheet" href="styles.css">
   <script type="module" src="app.js"></script>
+  <script type="module" src="tournament.js"></script>
 </head>
 <body>
-  <header class="topbar"><a href="./" class="brand"><span class="logo" aria-hidden="true">c<span>e</span></span>commerce<span class="brand-light"> / content engine</span></a><div class="top-actions"><span class="badge" data-i18n="local">Your key. Your content.</span><button id="locale" type="button" aria-label="한국어로 전환">한국어</button></div></header>
+  <header class="topbar"><a href="./" class="brand"><span class="logo" aria-hidden="true">c<span>e</span></span>commerce<span class="brand-light"> / content engine</span></a><div class="top-actions"><a class="tournament-link" href="?tournament">Variant Tournament ↗</a><span class="badge" data-i18n="local">Your key. Your content.</span><button id="locale" type="button" aria-label="한국어로 전환">한국어</button></div></header>
   <main>
     <section class="hero"><div class="eyebrow" data-i18n="eyebrow">FROM PRODUCT FACTS TO YOUR NEXT LAUNCH</div><h1 data-i18n="hero">One product.<br>A whole lot of possibility.</h1><p data-i18n="intro">Paste the facts. Get a detail page, ads, a video script, and more — in one run.</p><div class="hero-meta"><span data-i18n="byok">Bring your own API key</span><span aria-hidden="true">✦</span><span data-i18n="noInstall">No install. No subscription.</span></div></section>
+
+    <section id="tournament" hidden aria-labelledby="tournament-title">
+      <div class="arena-heading"><div><div class="arena-eyebrow">FACT GUARD V2 / TOKEN FACTORY</div><h1 id="tournament-title">Many ideas. <em>One survivor.</em></h1><p>Parallel imagination. Evidence at the gate. A champion chosen through buyer personas.</p></div><a href="?fact-guard">Open original Fact Guard ↗</a></div>
+      <div class="arena-toolbar"><span id="arena-mode" class="arena-mode">CHECKING CONNECTION</span><span>NANO <b>→</b> SUPER <b>→</b> SUPER / ULTRA</span><span id="arena-phase" role="status" aria-live="polite">Ready for a new contender.</span></div>
+      <div class="arena-layout">
+        <form id="arena-form" class="arena-input">
+          <div class="arena-section-label">01 / THE SOURCE</div><h2>One product.<br>Every angle.</h2>
+          <label>Product name<input id="arena-name" maxlength="160" required></label>
+          <label>Verified seller facts<textarea id="arena-facts" rows="7" maxlength="8000" required></textarea></label>
+          <label>Forbidden claims<textarea id="arena-forbidden" rows="3" maxlength="1200"></textarea></label>
+          <div class="arena-options"><label>Variants<select id="arena-count"><option value="4">4 · quick round</option><option value="8">8 · fast bracket</option><option value="16" selected>16 · full arena</option><option value="32">32 · double field</option></select></label></div>
+          <button id="arena-run" type="submit">Launch tournament <span>↗</span></button>
+          <button id="arena-replay" type="button" disabled>Replay this tournament ↺</button>
+          <small>4 concurrent requests per run. Up to 2 active tournaments per server instance. 5 runs / IP / 10 min.</small>
+          <p id="arena-error" role="alert" hidden></p>
+        </form>
+        <div class="arena-field"><div class="arena-grid-heading"><span class="arena-section-label">02 / THE CREATIVE FIELD</span><span id="arena-survivors">16 contenders · awaiting launch</span></div><div id="arena-grid" class="arena-grid" aria-label="Ad creative variants"></div><p class="arena-legend"><span>● Generating</span><span>● Verified</span><span>× Eliminated</span><span>★ Winner</span></p></div>
+        <aside class="arena-bracket"><div class="arena-section-label">03 / THE BRACKET</div><h2>Persuasion,<br>under pressure.</h2><p>Only verified copy advances. Each pair meets a different simulated buyer.</p><div id="arena-rounds"><div class="bracket-empty">16 → 8 → 4 → 2 → 1<span>Evidence decides who enters.<br>Persona fit decides who wins.</span></div></div></aside>
+      </div>
+      <div id="arena-metrics" class="arena-metrics"></div>
+      <p id="arena-notice" class="arena-notice">Offline fixtures are clearly labeled. Persona judgments simulate preferences, not actual buyer research. Cost estimates use a dated public price snapshot.</p>
+      <section id="arena-winner" class="arena-winner" hidden aria-label="Tournament winner"></section>
+      <details id="arena-detail" class="arena-detail" hidden><summary>Inspect selected variant</summary><div></div></details>
+    </section>
     <div class="workspace">
       <section class="input-panel" aria-labelledby="input-title">
         <div class="panel-heading"><span class="step">01</span><h2 id="input-title" data-i18n="inputTitle">Your product, in context</h2></div>

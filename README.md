@@ -1,4 +1,4 @@
-> **Nebius hackathon branch — Fact Guard:** commerce copy with a claim-to-source trace, powered by Nemotron on Nebius Token Factory. [Hosted demo](https://commerce-content-engine-nemotron.vercel.app/) · [Hackathon source branch](https://github.com/kks0488/commerce-content-engine/tree/nebius-nemotron) · [MIT license](LICENSE).
+> **Nebius hackathon branch — Fact Guard v2:** 16 parallel creative ideas, an evidence gate, and one persona-judged winner, powered by Nemotron on Nebius Token Factory. [Hosted demo](https://commerce-content-engine-nemotron.vercel.app/) · [Hackathon source branch](https://github.com/kks0488/commerce-content-engine/tree/nebius-nemotron) · [MIT license](LICENSE).
 >
 > **Current status:** the hosted demo uses clearly labeled offline fixtures until `NEBIUS_API_KEY` is configured. No live Nebius inference has been verified. Real screen captures are in [media/](media/); the public YouTube demo is pending owner publication.
 
@@ -30,6 +30,51 @@ For online sellers, small brands, marketers and agencies: bring your own AI key 
     <td><strong>Margin snapshot</strong><br>Unit profit, margin and break-even ROAS computed locally in plain JavaScript, not by AI. Enter your price, cost, fees, shipping and ad spend per unit.</td>
   </tr>
 </table>
+
+## Variant Tournament / Fact Guard v2
+
+**[Open the tournament demo](https://commerce-content-engine-nemotron.vercel.app/?tournament)** · [Original Fact Guard](https://commerce-content-engine-nemotron.vercel.app/?fact-guard)
+
+Sellers need several creative directions, but generating and manually fact-checking each one is slow. One product now becomes **16 ad variants by default, up to 32**: Nano explores different angles, tones and audiences through a pool of four parallel requests. Each creative includes a headline, hook and exactly three contiguous beats spanning 0–3, 3–10 and 10–15 seconds, with visuals, voiceover and captions. Super independently reviews every displayed text field. Missing, contradictory, unsupported, risky or uncited factual copy is eliminated before judging. There must be at least one supported factual field to qualify.
+
+Verified survivors enter pairwise Super judgments (or Ultra via `NEBIUS_JUDGE_MODEL`). Practical, design-focused, skeptical and busy-mobile buyer personas rotate across duels. Odd fields advance through explicit byes; zero survivors means **no winner**. Reasons are visible throughout, and the winner retains every source quote and its full 15-second script. These personas simulate preferences; they are not customer research or conversion predictions.
+
+```mermaid
+flowchart LR
+  P[One product + seller facts] --> N[Nano: 16 variants / 4 concurrent calls]
+  N --> S[Super: audit all creative fields]
+  P --> S
+  S -->|Unsupported or risky| X[Eliminated]
+  S -->|All fields pass| B[Pairwise Super or Ultra judgments]
+  B --> R[Rotating simulated buyer personas]
+  R --> W[One winner + source trace]
+  N --> M[Tokens / stage wall time / estimated USD]
+  S --> M
+  B --> M
+```
+
+The animated 4×4 field streams actual server progress over NDJSON, shows eliminations and bracket rounds, and supports tile inspection, replay, 32-tile fields, mobile layouts and reduced motion. On the hosted Nemotron domain it is the default landing page; the original bundle/Fact Guard interface remains at `?fact-guard`. On a static host the tournament explicitly uses offline fixtures.
+
+**Honest accounting:** every stage reports calls, token usage, stage wall time and estimated USD. Parallel calls reduce waiting, not billed tokens. Prices come from the [official public model catalogue](https://tokenfactory.nebius.com/api/public/models_info), checked with curl on 2026-10-16: Nano $0.06/$0.24, Super $0.30/$0.90, Ultra $1/$3 per million input/output tokens. The optional all-large comparison holds token counts constant and reprices only generation at the judge model's rate. It is a counterfactual cost estimate, not a measured performance benchmark. Unknown model prices or missing usage show as unavailable. Fixture tokens are estimated; fixture times measure local replay, and the animation is deliberately paced. No live inference or sponsor speed/cost benchmark has been verified.
+
+**Hosted bounds:** `POST /api/tournament` accepts product fields plus integer `count` (2–32). Server configuration controls model names, credentials, endpoints, a four-request pool, two active tournaments per warm instance, five runs per trusted IP per ten minutes, 16 KB bodies, 64 source facts and a 280-second deadline. Browser disconnects cancel in-flight model calls. Limits are in-memory **per instance**, not a distributed quota: cold starts or horizontal scaling can exceed aggregate limits. No paid storage or rate-limit service was provisioned. Live upstream/schema failures stop the run and never fall back to demo fixtures.
+
+**Offline behavior:** the sample deliberately injects four unsafe variants into the default field; 12 survive and require 11 judged duels. Responses use the official [Chat Completion envelope and usage schema](https://docs.tokenfactory.nebius.com/api-reference/inference/create-chat-completion), read using curl. Offline templates are English, judgments are scripted, and arbitrary custom forbidden claims fail closed because template fixtures cannot verify them.
+
+```sh
+# On pilot for dev servers/builds/browser recording; small node tests can run locally.
+node --test
+# No dependencies needed.
+npm run dev
+# http://127.0.0.1:8080/?tournament
+npm run build
+# Live mode activates automatically when NEBIUS_API_KEY or LLM_API_KEY exists.
+# Optional: NEBIUS_JUDGE_MODEL=nvidia/Nemotron-3-Ultra-550b-a55b
+# PLAYWRIGHT_MODULE and PLAYWRIGHT_CHROMIUM_PATH can select installed tools on pilot.
+node scripts/capture.mjs
+```
+
+Core: [`src/tournament.js`](src/tournament.js). Hosted endpoint: [`api/tournament.js`](api/tournament.js), reusing the existing input/rate-limit handler. UI: [`tournament.js`](tournament.js), `index.html`, `styles.css`. Mocked-model/API tests: [`test/tournament.test.mjs`](test/tournament.test.mjs). Real 1920×1080 screenshots: [`media/06-tournament-ready.png`](media/06-tournament-ready.png) through [`media/10-tournament-winner-trace.png`](media/10-tournament-winner-trace.png); mobile screenshot: [`media/11-mobile-tournament.png`](media/11-mobile-tournament.png). The captured `media/tournament-1920x1080.webm` is intentionally uncommitted and also copied into the owner's `hackathons/nebius/capture/` folder for the shared video kit.
 
 ## Nemotron on Nebius Token Factory
 
@@ -95,14 +140,15 @@ npm run build
 The project is `commerce-content-engine-nemotron`; the original Pages deployment is unaffected. The Vercel build copies only public files into `out/`; the serverless function imports the shared core. Deploy from this branch:
 
 ```sh
-vercel --prod --yes --project commerce-content-engine-nemotron
+vercel link --yes --project commerce-content-engine-nemotron
+vercel --prod --yes
 ```
 
 Add `NEBIUS_API_KEY` through the Vercel environment-variable UI (Production), then redeploy. Keys stay in the function environment and never reach the browser. `GET /api/fact-guard` reports only mode and model names. `POST` accepts product fields only; users cannot override keys, models, upstream URLs or round limits. Bounds: 16 KB JSON, 160-character name, 8,000-character facts, 64 fact segments, five runs per IP per ten minutes, two revisions and a 280-second total pipeline budget. Request timeouts bound live work. Rate limiting is **in-memory per warm function instance**, so cold starts/multiple instances reset it; use a distributed quota before opening sustained paid traffic. No usage-based add-ons or paid services are provisioned.
 
 ### What was built during the hackathon
 
-This is an extension of the existing MIT Commerce Content Engine, not a claim that the original app was created during this hackathon. The existing baseline supplied the dependency-free browser, CLI, bundle schema, margin calculation and CI. The `nebius-nemotron` branch adds the Nebius provider; Nano → Super/Ultra → Nano agent orchestration; complete field coverage and verbatim source validation; trust scoring, history, before/after and step metrics; deterministic offline API-schema fixtures; the serverless endpoint and limits; separate Vercel configuration; focused tests and real Playwright screen captures. Main is not merged.
+This is an extension of the existing MIT Commerce Content Engine, not a claim that the original app was created during this hackathon. The existing baseline supplied the dependency-free browser, CLI, bundle schema, margin calculation and CI. The `nebius-nemotron` branch adds the Nebius provider; Nano → Super/Ultra → Nano agent orchestration; complete field coverage and verbatim source validation; trust scoring, history, before/after and step metrics; deterministic offline API-schema fixtures; the serverless endpoint and limits; separate Vercel configuration; focused tests and real Playwright screen captures. Fact Guard v2 adds parallel variant generation, fail-closed elimination, persona brackets, streamed arena animation, per-stage cost estimates, hosted concurrency bounds, mocked tournament/API tests and 1080p screen/video captures. Main is not merged.
 
 ### Submission readiness and sponsor feedback
 

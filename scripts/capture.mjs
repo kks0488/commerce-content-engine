@@ -71,6 +71,41 @@ try {
   assert.equal(await original.locator('#provider').isDisabled(), false);
   await original.close();
   await context.close();
+  // Fact Guard v2: record the real streamed tournament and its paced fixture animation.
+  const tournamentContext = await browser.newContext({ viewport: { width: 1920, height: 1080 }, colorScheme: 'dark',
+    recordVideo: { dir: '/tmp/nebius-tournament-recording', size: { width: 1920, height: 1080 } } });
+  const arena = await tournamentContext.newPage();
+  arena.on('pageerror', error => errors.push(error.message));
+  await arena.goto(`http://127.0.0.1:${port}/?tournament`);
+  await arena.getByText('DEMO / OFFLINE FIXTURES', { exact: true }).waitFor();
+  assert.equal(await arena.locator('.variant-tile').count(), 16);
+  await arena.screenshot({ path: `${root}/media/06-tournament-ready.png` });
+  await arena.locator('#arena-run').click();
+  await arena.locator('.variant-tile.drafted').first().waitFor();
+  await arena.screenshot({ path: `${root}/media/07-tournament-generating.png` });
+  await arena.locator('.variant-tile.eliminated').first().waitFor();
+  await arena.screenshot({ path: `${root}/media/08-tournament-fact-gate.png` });
+  await arena.locator('.variant-tile.winner').waitFor();
+  await arena.waitForFunction(() => !document.querySelector('#arena-run').disabled);
+  assert.equal(await arena.locator('.variant-tile.eliminated').count(), 4);
+  assert.equal(await arena.locator('.bracket-round').count(), 4);
+  assert.equal(await arena.locator('.variant-tile.winner').count(), 1);
+  assert.match(await arena.locator('#arena-notice').innerText(), /No model called/);
+  assert.match(await arena.locator('#arena-metrics').innerText(), /11 big-model duels/);
+  assert.equal(await arena.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await arena.screenshot({ path: `${root}/media/09-tournament-bracket.png` });
+  await arena.locator('.winner-banner').evaluate(el => el.scrollIntoView({ block: 'start' }));
+  await arena.screenshot({ path: `${root}/media/10-tournament-winner-trace.png` });
+  assert.equal(await arena.locator('#arena-winner .arena-trace > div').count(), 14);
+  // Select a rejected tile and expose the exact failed claim/reason.
+  await arena.locator('[data-variant="V04"]').click();
+  assert.match(await arena.locator('#arena-detail').innerText(), /Medical guarantee/);
+  await arena.locator('#arena-count').selectOption('32');
+  assert.equal(await arena.locator('.variant-tile').count(), 32);
+  await arena.locator('#arena-count').selectOption('16');
+  const video = arena.video();
+  await tournamentContext.close();
+  await video.saveAs(`${root}/media/tournament-1920x1080.webm`);
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
   const mp = await mobile.newPage();
   mp.on('pageerror', error => errors.push(error.message));
@@ -80,11 +115,21 @@ try {
   await mp.locator('.guard-verdict').scrollIntoViewIfNeeded();
   assert.equal(await mp.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'No mobile horizontal page overflow');
   await mp.screenshot({ path: `${root}/media/05-mobile-fact-guard.png` });
+  await mp.goto(`http://127.0.0.1:${port}/?tournament`);
+  await mp.getByText('DEMO / OFFLINE FIXTURES', { exact: true }).waitFor();
+  await mp.emulateMedia({ reducedMotion: 'reduce' });
+  // Reload so the reduced-motion preference applies to the animation controller.
+  await mp.reload();
+  await mp.locator('#arena-run').click();
+  await mp.locator('.variant-tile.winner').waitFor();
+  assert.equal(await mp.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'No tournament mobile horizontal page overflow');
+  await mp.locator('#arena-grid').scrollIntoViewIfNeeded();
+  await mp.screenshot({ path: `${root}/media/11-mobile-tournament.png` });
   await mobile.close();
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ browser: 'Chromium', viewport: '1920x1080', mode: 'offline fixtures',
-    checks: ['hosted POST flow', 'two caught claims', 'four routed steps', 'fact trace', 'margin', 'Markdown download', 'Korean UI', 'static sample regression', 'Nebius provider', '390px dark layout'],
-    pageErrors: errors, captures: 'media/01-05*.png', video: 'media/*.webm (not committed)' }, null, 2));
+    checks: ['hosted POST flow', 'two caught claims', 'four routed steps', 'fact trace', 'margin', 'Markdown download', 'Korean UI', 'static sample regression', 'Nebius provider', '390px dark layout', 'streamed 16-variant tournament', 'four unsafe variants rejected', '11 persona duels', 'winner trace', '32-tile layout', 'reduced-motion mobile tournament'],
+    pageErrors: errors, captures: 'media/01-11*.png', video: 'media/*.webm (not committed)' }, null, 2));
 } finally {
   await browser?.close();
   server.kill('SIGTERM');
