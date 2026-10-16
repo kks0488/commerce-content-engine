@@ -110,8 +110,8 @@ export function buildMessages(raw) {
   const instruction = ko ? `당신은 한국 쇼핑몰의 숙련된 카피라이터예요. 사실을 구매 이유와 사용 장면으로 바꾸되, 읽고 바로 게시하고 싶을 만큼 구체적이고 자연스럽게 쓰세요.
 친근/장난스러운 톤은 해요체, 프리미엄/전문가 톤은 합니다체로 본문·FAQ·내레이션의 종결을 통일하세요. 제목은 짧은 구절이어도 됩니다.
 스펙 나열이나 '이 제품은 ~로 제작된 ~입니다' 같은 백과사전식 문장 대신, 고객의 일상에서 시작해 사실로 뒷받침하세요. 장점은 막연한 칭찬 대신 무엇을 할 때 어떤 점이 좋은지 보여 주세요.
-절대 추정하지 마세요: 무게·가벼움·무게감, 미끄럼 방지·흔들림 없음·안정성, 다치지 않음·상처 걱정 없음·안심·안전, 건조 속도, 내구성·오래 사용, 질감·단단함·칼자국·변색. 모양은 모양의 장점까지만, 소재는 소재 이름까지만. 예: 둥근 모서리→둥근 선을 손으로 짚어 보는 장면은 가능; 둥근 모서리→다치지 않음은 불가. 두께 1.5cm→옆면으로 두께를 보여 주기는 가능; 두께→미끄럼 방지·무게감은 불가.
-허용: 크기→재료 손질 장면, 둥근 모서리→손에 걸리지 않는 둥근 선, 색→공간의 분위기, 분리형 뚜껑→분리해 씻는 장면. 금지: 소재만으로 항균·안전·내구성·보온·통기성·촉감 성능을 추정하기.
+절대 추정하지 마세요: 무게·가벼움·무게감, 미끄럼 방지·흔들림 없음·안정성, 다치지 않음·상처 걱정 없음·안심·안전, 건조 속도, 내구성·오래 사용, 질감·단단함·칼자국·변색. 모양은 모양의 장점까지만, 소재는 소재 이름까지만. 예: 둥근 모서리→손에 걸리지 않는 둥근 모서리는 가능; 둥근 모서리→다치지 않음은 불가. 두께 1.5cm→옆면으로 두께를 보여 주기는 가능; 두께→미끄럼 방지·무게감은 불가.
+허용: 크기→재료 손질 장면, 둥근 모서리→손에 걸리지 않는 둥근 모서리, 색→공간의 분위기, 분리형 뚜껑→분리해 씻는 장면. 금지: 소재만으로 항균·안전·내구성·보온·통기성·촉감 성능을 추정하기.
 상세페이지: 서로 다른 매력의 제목·부제, 사실과 사용 이유를 연결한 고객용 완결 문장 bullet 5개 (장면·모습 같은 내부 기획 메모 금지), 다른 이야기를 전개하는 짧은 설명 3문단, 제공 사실로만 답할 수 있는 FAQ 3쌍.
 광고: 서로 다른 각도(사용 순간/색감·형태/고객의 고민)의 제목 3개, 상황+특징+구체적인 행동을 담은 본문 2개, #해시태그 3개. 제목은 공백·기호 포함 25자 이내.
 쇼츠: 첫 2초 안에 공감이나 시각적 호기심을 만드는 짧은 질문/대비를 hook과 첫 내레이션에 동일하게 사용. 0-3s/3-12s/12-23s/23-35s 네 장면. 화면 지시·내레이션·자막 모두 채우세요. 전체 내레이션 100~170자, 제품을 보여 주는 여백을 두세요. CTA는 '크기 사진 보기', '색상 고르고 장바구니 담기'처럼 실제 행동으로.
@@ -133,7 +133,9 @@ The 35-second script must not invent care steps or performance. Show facts rathe
 Additional original editing example:
 Korean, supplied: a natural-color cutting board with rounded corners, 30x20cm, hand wash. Bad: '두께로 안정감을 주고, 모서리가 안전해요.' Good: '저녁 준비, 도마부터 꺼내요' / '한 끼 재료를 올려 손질하기 넉넉한 크기예요.' / '내추럴 색감으로 주방에 차분한 분위기를 더해요.' / hook '오늘 저녁, 뭐 해 먹죠?' / CTA '도마 크기 사진을 보고 장바구니에 담아 보세요.'
 English, supplied: a blue open-top storage bin, 20 cm wide. Bad: 'Durable and lightweight for every home.' Good: 'Your pens, finally in one place' / 'Gather scattered pens into one blue bin and reach straight through the open top.' / hook 'Where did that pen go?' / CTA 'Measure a 20 cm spot and view the bin photos.'
-PUBLISHABLE COPY IS REQUIRED, NOT JUST SAFE COPY. Put the customer's moment BEFORE the specification. Never use the product name/material/dimensions alone as a headline. Examples of different headline angles: '저녁 준비, 도마부터 꺼내요' (use moment), '주방에 차분한 색 한 점' (visual mood), '한 끼 재료, 펼쳐 놓고 손질해요' (task). For a cup: '책상 앞에서도, 내 음료 한 잔' / '크림색으로 채우는 책상 취향' / '뚜껑은 분리해서 씻어요'. These are writing examples only, not facts for other products.
+PUBLISHABLE COPY IS REQUIRED, NOT JUST SAFE COPY. Never tell customers they can trace/touch a rounded line; that is a shoot direction, not a buying reason. A rounded corner's ordinary tactile value is '손에 걸리지 않는 둥근 모서리'. Say '대나무 결' (when supplied), never the contrived phrase '내추럴 결 한 장'. Do not repeat the same sentence in bullet, paragraph and narration.
+A strong hook creates a small contrast or an appealing moment: kitchen example '배달 말고, 오늘은 집밥!' with ingredients entering frame; cup example '회의 끝, 한 모금!' with a drink poured beside a laptop; shirt example 'Same jeans. New weekend mood.' with an outfit change. Do not ask obvious location questions like '채소는 어디서 썰죠?' or '책상 위에 뭐 두고 마시죠?'. Do not invent speed/health/performance to make a hook stronger.
+ Put the customer's moment BEFORE the specification. Never use the product name/material/dimensions alone as a headline. Examples of different headline angles: '저녁 준비, 도마부터 꺼내요' (use moment), '주방에 차분한 색 한 점' (visual mood), '한 끼 재료, 펼쳐 놓고 손질해요' (task). For a cup: '책상 앞에서도, 내 음료 한 잔' / '크림색으로 채우는 책상 취향' / '뚜껑은 분리해서 씻어요'. These are writing examples only, not facts for other products.
 Short paragraphs should each add a new situation or purchase reason, not repeat the bullets. Ads need a tangible action, not care directions alone. A care instruction should be one detail supporting an attractive everyday scene, never the entire ad body. Hook should be brief enough for two seconds: '오늘 저녁, 뭐 해 먹죠?' / '내 음료, 어디 뒀죠?' / 'What goes with your weekend?' Avoid long questions summarizing specifications.
 FINAL SELF-CHECK BEFORE RETURNING: borderline performance claims FAIL. Do not rationalize them as reasonable benefits. Omit them entirely and replace with a use moment or visual styling.
 For Korean, NEVER use these words without explicit positive supplied evidence: 항균, 위생, 안심, 안전, 상처, 다치지, 미끄럼, 안정감, 무게감, 가볍, 오래, 빠른 건조. Do not add '100%' to a material name. Do not add texture/finish facts not supplied. Friendly Korean FAQ answers MUST end in 해요체, not 입니다/습니다. The first hook is a short moment of curiosity, not a summary of specs. Avoid editorial phrases like '사진 보기 및 ...'; write the CTA as a natural sentence to the customer.
@@ -373,6 +375,7 @@ export function validateCopy(bundle, input) {
       if (/\.time$/.test(path)) return;
       // Composition is a fact, not an absolute performance promise.
       const withoutComposition = value.replace(/100\s*%\s*(?:linen|cotton|리넨|린넨|면)(?=$|[^\p{L}])/giu, match => source.toLowerCase().includes(match.toLowerCase()) ? '' : match);
+      if (!/\.visual$|\.angle$/.test(path) && /손끝.{0,15}둥근 선|둥근 선.{0,15}짚어|내추럴 결 한 장/u.test(value)) fail(`Invalid editorial copy at ${path}; replace the demonstration note with an ordinary use benefit and natural Korean.`);
       if (/뚜껑.{0,10}쪼개|쪼개.{0,10}뚜껑/u.test(value)) fail(`Invalid unsupported lid instruction at ${path}; a removable lid can be removed, not broken apart.`);
       if (banned.test(withoutComposition) || medical.test(value)) fail(`Invalid banned claim at ${path}: "${value}".`);
       if (caveat.test(value)) fail(`Invalid unknown-attribute leakage at ${path}: "${value}". Omit this attribute; unknowns belong ONLY in listingCheck.`);
@@ -395,6 +398,7 @@ export function validateCopy(bundle, input) {
     if (length > (input.language === 'English' ? 5 : 12)) fail('Invalid thumbnail length; shorten the text.');
   }
   for (const [i, bullet] of (bundle.pdp?.bullets || []).entries()) if (/(?:장면|모습|컷)[.!?。]?$/u.test(bullet)) fail(`Invalid internal scene note at pdp.bullets.${i}; write finished customer copy, not a production direction.`);
+  if (bundle.shorts?.hook && /어디서.{0,12}(?:썰|마시)|뭐.{0,12}두고.{0,8}마시/u.test(bundle.shorts.hook)) fail('Invalid weak hook; create curiosity with a concrete use moment or contrast, not an obvious location question.');
   const attributes = [
     [/크기|dimensions|size/i, /크기|dimensions|size/i], [/소재|재질|material/i, /소재|재질|material/i],
     [/색상|color/i, /색상|color/i], [/용량|capacity/i, /용량|capacity/i], [/관리|care/i, /관리|care/i],
