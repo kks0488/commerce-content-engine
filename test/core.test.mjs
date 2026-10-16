@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { normalizeInput, buildMessages, parseBundle, computeMargin, extractProductFromHtml, callLLM, generateBundle, bundleToMarkdown, SAMPLE_PRODUCT, DEMO_BUNDLE, withContentRetry, BUNDLE_JSON_SCHEMA, validateCopy, groundKnownFaq } from '../src/core.js';
+import { normalizeInput, buildMessages, parseBundle, computeMargin, extractProductFromHtml, callLLM, generateBundle, bundleToMarkdown, SAMPLE_PRODUCT, DEMO_BUNDLE, withContentRetry, BUNDLE_JSON_SCHEMA, validateCopy } from '../src/core.js';
 
 test('input validation reports readable errors together and preserves zero cost', () => {
   assert.throws(() => normalizeInput({ price: -1, cost: 'oops' }), error => error.errors.length === 4 && /product_name/.test(error.message) && /product_info/.test(error.message));
@@ -71,10 +71,10 @@ test('HTML extraction falls back to OG/meta/title and handles empty/malformed co
 
 test('messages specify language, channel, forbidden claims, schema and no-invention rule', () => {
   const { system, user } = buildMessages({ ...SAMPLE_PRODUCT, language: 'Japanese', channel: 'TikTok Shop', forbidden_claims: 'No medical claims' });
-  assert.match(system, /Japanese/); assert.match(system, /Never invent certifications, awards, reviews, numbers, or medical\/efficacy claims/);
-  assert.match(system, /JSON only/); assert.match(system, /30-45/); assert.match(system, /untrusted/); assert.match(system, /\[needs info\]/);
+  assert.match(system, /Japanese/); assert.match(system, /Use only supplied specs, numbers, certifications/);
+  assert.match(system, /JSON only/); assert.match(system, /23-35s/); assert.match(system, /untrusted/); assert.match(system, /No placeholders anywhere/);
   assert.match(user, /TikTok Shop/); assert.match(user, /No medical claims/); assert.match(system, /listingCheck/);
-  assert.match(buildMessages(SAMPLE_PRODUCT).system, /\[확인 필요\]/);
+  assert.match(buildMessages(SAMPLE_PRODUCT).system, /ONLY in listingCheck/);
 });
 
 const response = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
@@ -234,14 +234,44 @@ test('observed unsupported claims trigger validation', () => {
   assert.throws(() => validateCopy({ ads: { bodies: ['스테인리스라 위생적이고 튼튼해요.'] } }, SAMPLE_PRODUCT), /unsupported benefit/);
 });
 
-test('missing-spec FAQ slots use known seller facts without guessing missing performance', () => {
-  const input = normalizeInput({ product_name: '컵', product_info: '용량: 500ml.\n소재: 스테인리스.\n색상: 무광 크림색.\n보온 시간: 미확인', language: 'Korean' });
-  const bundle = structuredClone(DEMO_BUNDLE);
-  bundle.pdp.faq = Array.from({ length: 3 }, () => ({ question: '성능은 어떤가요?', answer: '[확인 필요] 보온 지속 시간' }));
-  groundKnownFaq(bundle, input);
-  assert.deepEqual(bundle.pdp.faq.map(row => row.answer), ['500ml입니다.', '스테인리스입니다.', '무광 크림색입니다.']);
-  assert.doesNotMatch(JSON.stringify(bundle.pdp.faq), /보온|needs info|확인 필요/);
-  const original = structuredClone(DEMO_BUNDLE.pdp.faq);
-  const noLabels = { ...input, product_info: '배송 조건은 아직 모릅니다.' };
-  bundle.pdp.faq = original; groundKnownFaq(bundle, noLabels); assert.deepEqual(bundle.pdp.faq, original);
+test('publication rubric rejects customer caveats, absolutes, oversized headlines and placeholders without editing', () => {
+  const input = normalizeInput({ product_name: 'Cup', product_info: 'Material: steel. Heat retention: unknown.', language: 'English' });
+  for (const value of ['Best cup', 'Guaranteed cup', 'No.1 cup', '100% leakproof', 'A perfect cup', 'This cures fatigue']) {
+    assert.throws(() => validateCopy({ ads: { bodies: [value] } }, input), /banned claim/, value);
+  }
+  for (const value of ['Heat retention is not confirmed.', 'Ask the seller about leak resistance.', 'Unknown durability.', 'Not tested yet.']) {
+    assert.throws(() => validateCopy({ pdp: { faq: [{ question: value, answer: 'Steel.' }] } }, input), /leakage/, value);
+  }
+  for (const value of ['보온 시간은 확인되지 않았어요.', '밀폐 여부는 판매자에게 문의해 주세요.', '성능 정보 없음', '검증되지 않은 보온 성능']) {
+    assert.throws(() => validateCopy({ shorts: { scenes: [{ voiceover: value }] } }, SAMPLE_PRODUCT), /leakage/, value);
+  }
+  for (const [language, length] of [['Korean', 25], ['English', 40]]) {
+    const local = { ...input, language };
+    const good = { ads: { headlines: [(language === 'Korean' ? '가' : 'a').repeat(length)] } };
+    assert.equal(validateCopy(good, local), good);
+    good.ads.headlines[0] += 'x'; assert.throws(() => validateCopy(good, local), /headline length/);
+  }
+  assert.throws(() => validateCopy({ pdp: { subheadline: '[needs info] color' } }, input), /placeholder/);
+  assert.throws(() => validateCopy({ ads: { bodies: [''] } }, input), /empty/);
+  const b = { ads: { bodies: ['Pour your morning tea into a steel cup.'] }, listingCheck: [{ issue: 'Heat retention is unknown.', fix: 'Obtain test evidence.' }] };
+  const before = JSON.stringify(b); validateCopy(b, input); assert.equal(JSON.stringify(b), before);
+  assert.doesNotThrow(() => validateCopy({ pdp: { subheadline: '100% linen for your next outfit.' } }, { ...input, product_info: '100% linen.' }));
+});
+
+test('rubric distinguishes unknown source mentions from evidence and allows ordinary benefit framing', () => {
+  const input = normalizeInput({ product_name: '도마', product_info: '크기: 가로 30cm, 세로 20cm.\n형태: 둥근 모서리.\n항균·무게 정보: 미제공.', language: 'Korean' });
+  for (const claim of ['항균 효과가 있어요.', '가볍게 들 수 있어요.', '칼질해도 미끄러지지 않아요.', '손을 다치지 않게 잡아줘요.']) {
+    assert.throws(() => validateCopy({ ads: { bodies: [claim] } }, input), /unsupported benefit/);
+  }
+  const copy = { ads: { bodies: ['한 끼 재료를 손질하기 넉넉한 크기예요.', '손에 걸리지 않는 둥근 모서리를 짚어 보세요.'] } };
+  assert.equal(validateCopy(copy, input), copy);
+  assert.throws(() => validateCopy({ pdp: { subheadline: '100% linen.' } }, { ...input, language: 'English', product_info: 'Material: linen.' }), /banned claim/);
+});
+
+test('repair feedback includes every independent rubric failure and rejects mixed-language copy', () => {
+  const input = normalizeInput({ ...SAMPLE_PRODUCT, language: 'Korean' });
+  assert.throws(() => validateCopy({ pdp: { headline: '최고 도마', subheadline: '주방 counters 위에서 써요.' }, shorts: { hook: '보온 시간은 확인이 필요해요.' } }, input), error => /banned claim/.test(error.message) && /output language/.test(error.message) && /leakage/.test(error.message));
+  for (const claim of ['It has not been verified.', 'The capacity is not known.', 'Please confirm the lid test.']) {
+    assert.throws(() => validateCopy({ ads: { bodies: [claim] } }, { ...input, language: 'English' }), /leakage/);
+  }
 });
