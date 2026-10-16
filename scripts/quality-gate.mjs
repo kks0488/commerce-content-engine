@@ -91,12 +91,13 @@ if (mode === 'benchmark') {
       const id = `round${round}-${input.id}`;
       if (manifest.runs.some(run => run.id === id)) { console.log(`Already captured: ${id}`); continue; }
       // Reserve the maximum up front; a network failure cannot silently lose budget accounting.
-      if (manifest.calls + 6 > manifest.budget) throw new Error('Insufficient live-call budget for another hosted request.');
-      manifest.calls += 6; manifest.pendingRequest = { id, started: new Date().toISOString() }; await save();
+      if (manifest.calls + 2 > manifest.budget) throw new Error('Insufficient live-call budget for another hosted request.');
+      const reservedCalls = Math.min(6, manifest.budget - manifest.calls);
+      manifest.calls += reservedCalls; manifest.pendingRequest = { id, started: new Date().toISOString() }; await save();
       const started = performance.now();
       let status, text, retryAfter, page;
       if (browser) {
-        page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+        page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, extraHTTPHeaders: { 'x-cce-max-calls': String(reservedCalls) } });
         await page.goto(new URL('/?fact-guard', endpoint).href);
         await page.waitForFunction(() => document.querySelector('#connection-fields').hidden);
         for (const [key, value] of Object.entries(normalizeInput(input))) {
@@ -109,11 +110,11 @@ if (mode === 'benchmark') {
         await page.locator('#generate').click();
         const response = await pending; status = response.status(); text = await response.text(); retryAfter = response.headers()['retry-after'];
       } else {
-        const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: AbortSignal.timeout(295000) });
+        const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-cce-max-calls': String(reservedCalls) }, body: JSON.stringify(input), signal: AbortSignal.timeout(295000) });
         status = response.status; text = await response.text(); retryAfter = response.headers.get('retry-after');
       }
       if (status === 429) {
-        manifest.calls -= 6; delete manifest.pendingRequest; await save();
+        manifest.calls -= reservedCalls; delete manifest.pendingRequest; await save();
         throw new Error(`Production rate limited. Retry-After: ${retryAfter}`);
       }
       // Always save exact response bytes, including failures, before parsing or checking.
@@ -121,9 +122,9 @@ if (mode === 'benchmark') {
       const data = JSON.parse(text);
       delete manifest.pendingRequest;
       if (status !== 200 || !data.factGuard || data.factGuard.fallback) {
-        await save(); throw new Error(`Production generation failed (HTTP ${status}); reserved 6 calls conservatively.`);
+        await save(); throw new Error(`Production generation failed (HTTP ${status}); reserved ${reservedCalls} calls conservatively.`);
       }
-      manifest.calls += data.factGuard.steps.length - 6; await save();
+      manifest.calls += data.factGuard.steps.length - reservedCalls; await save();
       await record(id, input, data, text, Math.round(performance.now() - started));
       if (page) {
         await page.locator('#tab-pdp').click();

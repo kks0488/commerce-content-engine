@@ -65,6 +65,12 @@ export function createHandler({ env = process.env, run = runFactGuard, now = Dat
       const options = { apiKey, provider: 'nebius', baseUrl: env.LLM_BASE_URL,
         draftModel: (!tournament && env.NEBIUS_COPY_MODEL) || env.NEBIUS_DRAFT_MODEL || env.LLM_MODEL || NEMOTRON_MODELS.lightning,
         verifyModel: env.NEBIUS_VERIFY_MODEL || NEMOTRON_MODELS.super, deadlineMs: 280000, maxRounds: tournament ? 2 : 1 };
+      if (!tournament) {
+        // Public clients may lower the six-call ceiling, never raise it or choose models/keys.
+        const cap = Number(req.headers['x-cce-max-calls'] ?? 6);
+        if (!Number.isInteger(cap) || cap < 2 || cap > 6) return reply(400, { error: 'Model-call ceiling must be an integer from 2 to 6.' });
+        options.maxCalls = cap;
+      }
       if (tournament) Object.assign(options, { count: body.count ?? 16, concurrency: 6,
         judgeModel: env.NEBIUS_JUDGE_MODEL || NEMOTRON_MODELS.super });
       if (tournament && active >= 2) { res.setHeader('Retry-After', '15'); return reply(429, { error: 'Two tournaments are already running. Try again shortly.' }); }

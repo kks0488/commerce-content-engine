@@ -37,7 +37,7 @@ test('server uses environment routing and ignores all client credentials, models
   const { onProgress, signal, ...routing } = captured.options;
   assert.equal(typeof onProgress, 'function'); assert.ok(signal instanceof AbortSignal);
   assert.deepEqual(routing, { apiKey: fakeKey, provider: 'nebius', baseUrl: 'https://example.invalid/v1/',
-    draftModel: 'server-draft', verifyModel: 'server-verify', deadlineMs: 280000, maxRounds: 1 });
+    draftModel: 'server-draft', verifyModel: 'server-verify', deadlineMs: 280000, maxRounds: 1, maxCalls: 6 });
   assert.equal(result.body.factGuard.mode, 'live'); assert.ok(!JSON.stringify(result.body).includes(fakeKey));
 });
 
@@ -129,4 +129,14 @@ test('hosted copy model override leaves the tournament draft routing independent
   const tournament = await invoke(createHandler({ env, tournament: true }), { method: 'GET' });
   assert.equal(copy.body.models.draft, 'copy-writer');
   assert.equal(tournament.body.models.draft, 'tournament-writer');
+});
+
+test('public copy requests can lower but cannot raise the model-call ceiling', async () => {
+  let captured;
+  const handler = createHandler({ env: {}, run: async (_input, options) => { captured = options; return {}; } });
+  const request = { method: 'POST', headers: { 'content-type': 'application/json', 'x-cce-max-calls': '2' }, body: { product_name: 'Cup', product_info: 'Steel.' } };
+  assert.equal((await invoke(handler, request)).statusCode, 200);
+  assert.equal(captured.maxCalls, 2);
+  request.headers['x-cce-max-calls'] = '7';
+  assert.equal((await invoke(handler, request)).statusCode, 400);
 });

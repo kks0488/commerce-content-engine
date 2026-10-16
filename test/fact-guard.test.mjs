@@ -256,3 +256,11 @@ test('verifier schema requires one explained review per field before semantic ci
   assert.deepEqual(claims.items.properties.path.enum, ['pdp.headline']);
   assert.ok(claims.items.required.includes('sources'));
 });
+
+test('live call ceiling stops before a verifier call after a repaired draft consumes the budget', async () => {
+  let calls = 0;
+  await assert.rejects(runFactGuard(input, { apiKey: fakeKey, maxCalls: 2, fetchImpl: async (_url, init) => {
+    calls++; return response(calls === 1 ? { pdp: content().pdp } : content(), JSON.parse(init.body).model);
+  } }), /call budget exhausted/);
+  assert.equal(calls, 2);
+});

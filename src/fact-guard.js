@@ -161,7 +161,7 @@ export async function runFactGuard(raw, options = {}) {
   const verifyModel = options.verifyModel || NEMOTRON_MODELS.super;
   const maxRounds = Math.min(2, Math.max(0, Math.trunc(options.maxRounds ?? 2)));
   const steps = [], history = [];
-  let rawOutput = null;
+  let rawOutput = null, callsStarted = 0;
   const deadline = Date.now() + (options.deadlineMs || 280000);
   async function step(name, round, model, messages, fixture) {
     const started = performance.now();
@@ -172,11 +172,15 @@ export async function runFactGuard(raw, options = {}) {
     if (mode === 'demo') {
       const response = fixtureCompletion(fixture(), model, messages);
       result = { text: response.choices[0].message.content, model, usage: response.usage };
-    } else result = await callLLM({ provider: options.provider || 'nebius', apiKey: options.apiKey,
+    } else {
+      if (callsStarted >= (options.maxCalls ?? Infinity)) throw new Error('Live model call budget exhausted before the next step.');
+      callsStarted++;
+      result = await callLLM({ provider: options.provider || 'nebius', apiKey: options.apiKey,
       baseUrl: options.baseUrl, fetchImpl: options.fetchImpl, model, ...messages,
       temperature: name === 'verify' ? 0.2 : 0.35,
       enableThinking: name !== 'verify' && /nemotron-3-super/i.test(model),
       maxTokens: name === 'verify' ? 14000 : 12000, jsonSchema: name === 'verify' ? claimTraceSchema(JSON.parse(messages.user).fields, facts) : BUNDLE_JSON_SCHEMA, detailed: true, timeoutMs: Math.min(90000, remaining), signal: options.signal });
+    }
     const record = { step: name, round, model: result.model, latencyMs: Math.round(performance.now() - started),
       usage: result.usage, usageEstimated: mode === 'demo', state: 'complete' };
     steps.push(record); options.onProgress?.(record);
