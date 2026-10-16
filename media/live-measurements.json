@@ -293,5 +293,37 @@
     "reasoningTokens": 0,
     "winner": "V14",
     "survivors": 10
+  },
+  {
+    "environment": "production",
+    "workflow": "copy-quality-gate",
+    "measuredAt": "2026-10-16T08:49:13.313Z",
+    "baseUrl": "https://commerce-content-engine-nemotron.vercel.app",
+    "mode": "live",
+    "gate": "FAIL",
+    "completedBundles": 3,
+    "requiredBundles": 9,
+    "consecutiveCompleteRounds": 1,
+    "callsUpperBound": 69,
+    "callBudget": 80,
+    "remainingCalls": 11,
+    "minimumCallsForRemainingBundles": 12,
+    "runtimeCommit": "2899cc5",
+    "deploymentId": "dpl_DutUX28x1sFwTsx88V9GTaXapNny",
+    "models": [
+      "deepseek-ai/DeepSeek-V4.1-Flash",
+      "nvidia/nemotron-3-super-120b-a12b"
+    ],
+    "newAttemptCalls": 7,
+    "estimatedCostUsd": 0.036235800000000006,
+    "latencyMs": [
+      64031,
+      70292,
+      48999
+    ],
+    "rawSamples": "~/projects/02_\uc5c5\ubb34_\uc790\ub3d9\ud654/upwork/hackathons/nebius/samples/raw/gate4-*",
+    "rawIntegrity": "All 3 raw model texts and hosted response byte hashes verified. No manual copy changes.",
+    "reason": "No complete 3x3 PASS within conservative 80-call cap. 3 accepted bundles; six more need at least 12 calls while 11 remain.",
+    "writerDecision": "Lightning, Super and Qwen trial copy failed review. DeepSeek V4.1 Flash drafts; Nemotron Super audits. Ultra was not called."
   }
 ]
