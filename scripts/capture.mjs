@@ -153,6 +153,21 @@ async function captureLive() {
   browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH, args: ['--no-sandbox'] });
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 },
     recordVideo: { dir: `/tmp/nebius-live-${label}`, size: { width: 1920, height: 1080 } } });
+  // Clone the real fetch response: Chromium's DevTools response.text() can lose
+  // consumed streaming bodies. The app still reads the original response normally.
+  await context.addInitScript(() => {
+    window.__captureResponses = {};
+    const original = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+      const response = await original(...args);
+      if (args[1]?.method === 'POST' && String(args[0]).startsWith('/api/')) {
+        const path = String(args[0]);
+        response.clone().text().then(text => { window.__captureResponses[path] = { status: response.status, text }; });
+      }
+      return response;
+    };
+  });
+  if (process.env.CAPTURE_WORKFLOW !== 'tournament') {
   const page = await context.newPage();
   page.setDefaultTimeout(30000);
   page.on('pageerror', error => errors.push(error.message));
@@ -195,6 +210,7 @@ async function captureLive() {
   console.log(JSON.stringify(summaries.at(-1)));
   const factVideo = page.video(); await page.close();
   await factVideo.saveAs(`${root}/media/live-${label}-fact-guard-1920x1080.webm`);
+  }
   const arena = await context.newPage();
   arena.on('pageerror', error => errors.push(error.message));
   await arena.goto(`${base}/?tournament`);
@@ -208,7 +224,9 @@ async function captureLive() {
   await arena.screenshot({ path: `${root}/media/live-${label}-07-tournament-generating.png` });
   const tournamentResponse = await tournamentResponsePromise;
   assert.equal(tournamentResponse.status(), 200);
-  const events = (await tournamentResponse.text()).trim().split('\n').map(line => JSON.parse(line));
+  await arena.waitForFunction(() => window.__captureResponses['/api/tournament'], null, { timeout: 295000 });
+  const captured = await arena.evaluate(() => window.__captureResponses['/api/tournament']);
+  const events = captured.text.trim().split('\n').map(line => JSON.parse(line));
   const result = events.find(e => e.type === 'result')?.result;
   assert.ok(result, 'Tournament must emit a final result');
   if (result.mode !== 'live') console.log(JSON.stringify({ environment: label, workflow: 'tournament', fallback: result.fallback, notice: result.notice }));

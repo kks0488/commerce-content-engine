@@ -43,7 +43,7 @@ function init() {
   }
   async function event(data, paced = false) {
     if (data.type === 'error') throw new Error(data.error);
-    if (data.type === 'fallback') { reset(); $('#arena-notice').textContent = data.notice; }
+    if (data.type === 'fallback') { reset(); $('#arena-notice').textContent = data.notice; $('#arena-error').textContent = data.notice; $('#arena-error').hidden = false; }
     if (data.type === 'start') { mode = data.mode; $('#arena-mode').textContent = mode === 'demo' ? 'DEMO / OFFLINE FIXTURES' : 'Live · Nebius Token Factory'; }
     if (data.type === 'stage') {
       const labels = { generate: 'Lightning is exploring creative directions', verify: 'Super is checking every assertion', judge: 'Simulated buyer personas are choosing' };

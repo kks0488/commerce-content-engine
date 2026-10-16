@@ -88,7 +88,13 @@ export function createHandler({ env = process.env, run = runFactGuard, now = Dat
       }
       try { bundle = await run(input, options); }
       catch (error) {
-        if (error.errors || /up to 64 source facts/.test(error.message)) return reply(400, { error: error.message });
+        if (error.errors || /up to 64 source facts/.test(error.message)) {
+          if (streaming) {
+            res.write(JSON.stringify({ type: 'error', error: 'Invalid product input. Check required fields, language, tone and the 64-fact limit.' }) + '\n');
+            return res.end();
+          }
+          return reply(400, { error: error.message });
+        }
         // Never start fixture work after a disconnect, or reflect upstream private text.
         if (controller.signal.aborted || !apiKey) {
           const failure = { error: 'Request stopped before completion. No result was confirmed.' };

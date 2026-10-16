@@ -280,6 +280,21 @@ test('NDJSON streams real tournament progress and exactly one final result', asy
   assert.equal(res.listenerCount('close'), 0);
 });
 
+test('streamed product validation returns an error event without a fixture fallback', async () => {
+  const handler = tournamentApi.createHandler({ env: { NEBIUS_API_KEY: fakeKey } });
+  const chunks = [];
+  const res = Object.assign(new EventEmitter(), { setHeader() {}, flushHeaders() {},
+    write(chunk) { chunks.push(chunk); }, end() { this.writableEnded = true; } });
+  const req = Object.assign(Readable.from([]), { method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/x-ndjson' },
+    socket: { remoteAddress: '192.0.2.45' }, body: { ...product, product_name: '' } });
+  await handler(req, res);
+  const events = chunks.map(line => JSON.parse(line));
+  assert.deepEqual(events.map(e => e.type), ['error']);
+  assert.match(events[0].error, /Invalid product input/);
+  assert.equal(res.writableEnded, true); assert.equal(res.listenerCount('close'), 0);
+});
+
 test('streaming live failure restarts explicit demo fixtures and preserves reported live token lower bound', async () => {
   const handler = tournamentApi.createHandler({ env: { NEBIUS_API_KEY: fakeKey }, run: async (_input, options) => {
     options.onProgress({ type: 'start', mode: 'live', count: 4 });

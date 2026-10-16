@@ -74,5 +74,224 @@
     "winner": "V03",
     "survivors": 4,
     "measuredOn": "2026-10-16"
+  },
+  {
+    "environment": "production",
+    "workflow": "fact-guard",
+    "measuredAt": "2026-10-16T07:15:57.167Z",
+    "baseUrl": "https://commerce-content-engine-nemotron.vercel.app",
+    "mode": "live",
+    "totals": {
+      "totalTokens": 25615,
+      "latencyMs": 61821,
+      "usageComplete": true
+    },
+    "steps": [
+      {
+        "step": "draft",
+        "round": 0,
+        "model": "nvidia/Nemotron-3_5-Lightning",
+        "latencyMs": 3351,
+        "usage": {
+          "completion_tokens": 842,
+          "prompt_tokens": 584,
+          "total_tokens": 1426,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": null,
+            "reasoning_tokens": 0,
+            "rejected_prediction_tokens": null
+          },
+          "prompt_tokens_details": null,
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 584
+        },
+        "usageEstimated": false,
+        "state": "complete"
+      },
+      {
+        "step": "verify",
+        "round": 0,
+        "model": "nvidia/nemotron-3-super-120b-a12b",
+        "latencyMs": 18566,
+        "usage": {
+          "completion_tokens": 4547,
+          "prompt_tokens": 1761,
+          "total_tokens": 6308,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": null,
+            "reasoning_tokens": 0,
+            "rejected_prediction_tokens": null
+          },
+          "prompt_tokens_details": {
+            "audio_tokens": null,
+            "cached_tokens": 0,
+            "created_cache_tokens": 0,
+            "multimodal_tokens": null
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 1761
+        },
+        "usageEstimated": false,
+        "state": "complete"
+      },
+      {
+        "step": "revise",
+        "round": 1,
+        "model": "nvidia/Nemotron-3_5-Lightning",
+        "latencyMs": 2921,
+        "usage": {
+          "completion_tokens": 859,
+          "prompt_tokens": 1557,
+          "total_tokens": 2416,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": null,
+            "reasoning_tokens": 0,
+            "rejected_prediction_tokens": null
+          },
+          "prompt_tokens_details": null,
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 1557
+        },
+        "usageEstimated": false,
+        "state": "complete"
+      },
+      {
+        "step": "verify",
+        "round": 1,
+        "model": "nvidia/nemotron-3-super-120b-a12b",
+        "latencyMs": 17337,
+        "usage": {
+          "completion_tokens": 4667,
+          "prompt_tokens": 1774,
+          "total_tokens": 6441,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": null,
+            "reasoning_tokens": 0,
+            "rejected_prediction_tokens": null
+          },
+          "prompt_tokens_details": {
+            "audio_tokens": null,
+            "cached_tokens": 0,
+            "created_cache_tokens": 0,
+            "multimodal_tokens": null
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 1774
+        },
+        "usageEstimated": false,
+        "state": "complete"
+      },
+      {
+        "step": "revise",
+        "round": 2,
+        "model": "nvidia/Nemotron-3_5-Lightning",
+        "latencyMs": 3121,
+        "usage": {
+          "completion_tokens": 855,
+          "prompt_tokens": 2087,
+          "total_tokens": 2942,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": null,
+            "reasoning_tokens": 0,
+            "rejected_prediction_tokens": null
+          },
+          "prompt_tokens_details": null,
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 2087
+        },
+        "usageEstimated": false,
+        "state": "complete"
+      },
+      {
+        "step": "verify",
+        "round": 2,
+        "model": "nvidia/nemotron-3-super-120b-a12b",
+        "latencyMs": 16525,
+        "usage": {
+          "completion_tokens": 4308,
+          "prompt_tokens": 1774,
+          "total_tokens": 6082,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": null,
+            "reasoning_tokens": 0,
+            "rejected_prediction_tokens": null
+          },
+          "prompt_tokens_details": {
+            "audio_tokens": null,
+            "cached_tokens": 0,
+            "created_cache_tokens": 0,
+            "multimodal_tokens": null
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 1774
+        },
+        "usageEstimated": false,
+        "state": "complete"
+      }
+    ],
+    "trustScore": 52,
+    "needsReview": true,
+    "changedFields": 3
+  },
+  {
+    "environment": "production",
+    "workflow": "tournament",
+    "measuredAt": "2026-10-16T07:18:11.019Z",
+    "baseUrl": "https://commerce-content-engine-nemotron.vercel.app",
+    "mode": "live",
+    "count": 16,
+    "concurrency": 6,
+    "totals": {
+      "totalTokens": 46452,
+      "latencyMs": 28242,
+      "usageComplete": true,
+      "costUsd": 0.023558159999999998,
+      "allLargeCostUsd": 0.027557400000000003,
+      "estimatedSavingsUsd": 0.003999240000000005,
+      "largeJudgeCalls": 9,
+      "avoidedUnsafeJudgeEntries": 6
+    },
+    "stages": [
+      {
+        "stage": "generate",
+        "calls": 16,
+        "latencyMs": 8043,
+        "requestMs": 44079,
+        "tokens": 10178,
+        "usageComplete": true,
+        "costUsd": 0.00127776
+      },
+      {
+        "stage": "verify",
+        "calls": 16,
+        "latencyMs": 16418,
+        "requestMs": 83378,
+        "tokens": 30144,
+        "usageComplete": true,
+        "costUsd": 0.020124
+      },
+      {
+        "stage": "judge",
+        "calls": 9,
+        "latencyMs": 3781,
+        "requestMs": 8953,
+        "tokens": 6130,
+        "usageComplete": true,
+        "costUsd": 0.0021564
+      }
+    ],
+    "models": [
+      "nvidia/Nemotron-3_5-Lightning",
+      "nvidia/nemotron-3-super-120b-a12b"
+    ],
+    "reasoningTokens": 0,
+    "winner": "V14",
+    "survivors": 10
   }
 ]
