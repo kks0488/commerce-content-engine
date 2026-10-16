@@ -176,7 +176,7 @@ async function captureLive() {
   await page.waitForFunction(() => document.querySelector('#connection-fields').hidden);
   const status = await (await context.request.get(`${base}/api/fact-guard`)).json();
   assert.equal(status.mode, 'live');
-  assert.equal(status.models.draft, NEMOTRON_MODELS.lightning);
+  assert.ok(status.models.draft, 'The hosted route must report its configured writer.');
   assert.equal(status.models.verify, NEMOTRON_MODELS.super);
   for (const [key, value] of Object.entries(FACT_GUARD_SAMPLE)) {
     const field = page.locator(`#product-form [name="${key}"]`);
@@ -193,6 +193,7 @@ async function captureLive() {
   assert.equal(response.status(), 200);
   const bundle = await response.json(), guard = bundle.factGuard;
   assert.equal(guard.mode, 'live', guard.notice); assert.equal(guard.fallback, undefined);
+  assert.equal(guard.steps[0].model, status.models.draft);
   assert.ok(guard.totals.totalTokens > 0); assert.equal(guard.totals.usageComplete, true);
   assert.ok(guard.steps.every(s => !s.usageEstimated && s.usage.total_tokens > 0));
   await page.locator('.guard-verdict').waitFor();
