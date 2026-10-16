@@ -1,5 +1,12 @@
 node_modules/
-.env
+.env*
+!.env.example
 *.log
 .DS_Store
 out/
+
+.work/
+
+.vercel/
+media/*.webm
+media/*.mp4

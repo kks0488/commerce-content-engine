@@ -11,14 +11,14 @@ Usage:
   node cli.mjs --url https://example.com/product --cost 9000
 
 Input:   --url URL  --file product.txt|json  --name TEXT  --info TEXT
-AI:      --provider openai|anthropic|gemini  --model ID  --base-url URL
+AI:      --provider openai|anthropic|gemini|nebius  --model ID  --base-url URL
 Content: --lang Korean|English|Japanese (ko|en|ja)  --channel TEXT
          --tone friendly|premium|playful|expert
          --customer TEXT  --forbidden-claims TEXT
 Margin:  --price N  --cost N  --fee PERCENT  --shipping N  --ad-cost N
 Output:  --format md|json (default md)  --out FILE  --demo  --help
 
-API key: OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY, or LLM_API_KEY.
+API key: OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY / NEBIUS_API_KEY, or LLM_API_KEY.
 OpenAI-compatible endpoints (OpenRouter, Ollama) use --provider openai --base-url.
 Use the same currency for all amounts. Fees default to 0%; enter your own fee.
 Demo is fixed Korean sample output; content options do not translate it.
@@ -45,7 +45,7 @@ async function main() {
   const flags = parseArgs(process.argv.slice(2));
   if (flags.help) { process.stdout.write(HELP); return; }
   if (flags.format && !['md', 'json'].includes(flags.format)) throw new ArgumentError('--format must be md or json.');
-  if (flags.provider && !PROVIDERS[flags.provider]) throw new ArgumentError('--provider must be openai, anthropic or gemini.');
+  if (flags.provider && !PROVIDERS[flags.provider]) throw new ArgumentError('--provider must be openai, anthropic, gemini or nebius.');
   let raw = {}, input, bundle;
   if (flags.demo) { input = SAMPLE_PRODUCT; bundle = DEMO_BUNDLE; }
   else {
@@ -74,7 +74,7 @@ async function main() {
     try { input = normalizeInput(raw); } catch (error) { throw new ArgumentError(error.message); }
     const provider = flags.provider || 'openai';
     const apiKey = process.env[`${provider.toUpperCase()}_API_KEY`] || process.env.LLM_API_KEY;
-    bundle = await generateBundle(input, { provider, apiKey, model: flags.model, baseUrl: flags['base-url'] });
+    bundle = await generateBundle(input, { provider, apiKey, model: flags.model || process.env.LLM_MODEL, baseUrl: flags['base-url'] || process.env.LLM_BASE_URL });
   }
   const output = flags.format === 'json' ? JSON.stringify(bundle, null, 2) + '\n' : bundleToMarkdown(bundle, input);
   if (flags.out) await writeFile(flags.out, output, 'utf8');
@@ -82,7 +82,7 @@ async function main() {
 }
 main().catch(error => {
   let message = error.message;
-  for (const name of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY', 'LLM_API_KEY']) {
+  for (const name of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY', 'NEBIUS_API_KEY', 'LLM_API_KEY']) {
     const key = process.env[name];
     if (key) message = message.split(key).join('[redacted]');
   }

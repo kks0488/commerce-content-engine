@@ -36,7 +36,11 @@ test('CLI fetches URL, merges overrides, generates via compatible API and explai
     if (req.url === '/product') { userAgent = req.headers['user-agent']; res.end('<meta property="og:title" content="Test cup"><p>Verified steel cup.</p>'); }
     else if (req.url === '/v1/chat/completions') {
       let body = ''; for await (const part of req) body += part;
-      received = JSON.parse(body); res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(DEMO_BUNDLE) } }] }));
+      received = JSON.parse(body);
+      const fixture = JSON.parse(received.messages[1].content).language === 'English'
+        ? JSON.parse(JSON.stringify(DEMO_BUNDLE), (_key, value) => typeof value === 'string' && /[가-힣]/.test(value)
+          ? (value.startsWith('#') ? '#TestCup' : 'Test cup facts.') : value) : DEMO_BUNDLE;
+      res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(fixture) } }] }));
     } else { res.statusCode = 404; res.end('Not found'); }
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));

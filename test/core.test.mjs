@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { normalizeInput, buildMessages, parseBundle, computeMargin, extractProductFromHtml, callLLM, generateBundle, bundleToMarkdown, SAMPLE_PRODUCT, DEMO_BUNDLE } from '../src/core.js';
+import { normalizeInput, buildMessages, parseBundle, computeMargin, extractProductFromHtml, callLLM, generateBundle, bundleToMarkdown, SAMPLE_PRODUCT, DEMO_BUNDLE, withContentRetry, BUNDLE_JSON_SCHEMA, validateCopy } from '../src/core.js';
 
 test('input validation reports readable errors together and preserves zero cost', () => {
   assert.throws(() => normalizeInput({ price: -1, cost: 'oops' }), error => error.errors.length === 4 && /product_name/.test(error.message) && /product_info/.test(error.message));
@@ -10,22 +10,24 @@ test('input validation reports readable errors together and preserves zero cost'
   for (const patch of [{ price: 0 }, { feePct: 101 }, { language: 'French' }, { tone: 'fake' }]) assert.throws(() => normalizeInput({ ...SAMPLE_PRODUCT, ...patch }));
 });
 
-test('parseBundle handles JSON fences, extra prose, and quoted braces', () => {
-  const raw = JSON.stringify({ pdp: { headline: 'Hello {world} with "quotes"' } });
+test('parseBundle handles JSON fences, prose and quoted braces on complete bundles', () => {
+  const raw = JSON.stringify({ ...DEMO_BUNDLE, pdp: { ...DEMO_BUNDLE.pdp, headline: 'Hello {world} with "quotes"' } });
   for (const text of [raw, '```json\n' + raw + '\n```', 'Your output:\n' + raw + '\nEnjoy!']) {
     const b = parseBundle(text);
     assert.equal(b.pdp.headline, 'Hello {world} with "quotes"');
-    assert.ok(Array.isArray(b.pdp.faq)); assert.ok(Array.isArray(b.shorts.scenes));
-    assert.equal(typeof b.ads.headlines[0], 'string');
     assert.doesNotThrow(() => bundleToMarkdown(b));
   }
 });
-test('parseBundle defaults malformed nested fields and ignores model margin', () => {
-  const b = parseBundle(JSON.stringify({ pdp: { bullets: [null, {}, 'valid'], faq: [null, { question: 'Q' }] }, ads: null, shorts: { scenes: [null, 3, { time: '0-3s' }] }, thumbnails: [null, {}], listingCheck: [{ priority: 'low' }, { priority: 'high' }, { priority: 'invalid' }], margin: { unitProfit: 999 } }));
-  assert.deepEqual(b.pdp.bullets, ['valid']); assert.equal(b.pdp.faq[0].answer, '[needs info]');
-  assert.equal(b.shorts.scenes[0].visual, '[needs info]'); assert.equal(b.thumbnails[0].text, '[needs info]');
-  assert.deepEqual(b.listingCheck.map(v => v.priority), ['high', 'medium', 'low']);
-  assert.equal(b.margin, null);
+test('parseBundle rejects partial sections, empty copy, placeholders and broken timelines', () => {
+  const copy = () => structuredClone(DEMO_BUNDLE);
+  for (const mutate of [b => delete b.ads, b => b.pdp.faq = [], b => b.pdp.bullets.pop(),
+    b => b.shorts.scenes = [], b => b.ads.headlines = ['[needs info]'], b => b.pdp.faq[0].answer = '[확인 필요]',
+    b => b.shorts.scenes[1].time = '4-12s', b => b.thumbnails[0] = null, b => b.listingCheck[0].priority = 'urgent']) {
+    const b = copy(); mutate(b); assert.throws(() => parseBundle(JSON.stringify(b)), /Invalid content bundle/);
+  }
+  const b = copy(); b.pdp.faq[0].answer = '[확인 필요] 배송비와 반품 가능 기간은 판매자에게 확인해 주세요.';
+  assert.doesNotThrow(() => parseBundle(JSON.stringify(b)));
+  b.margin = { unitProfit: 999 }; assert.equal(parseBundle(JSON.stringify(b)).margin, null);
 });
 test('parseBundle rejects garbage and unrecognized objects clearly', () => {
   for (const text of ['oops', '{}', '[]', '{broken}', '{"error":"No output"}', '{"pdp":null}', null]) assert.throws(() => parseBundle(text), /JSON|bundle|response/);
@@ -139,4 +141,95 @@ test('sample files match exported demo and meet requested content counts', async
   let end = 0;
   for (const scene of DEMO_BUNDLE.shorts.scenes) { const [, from, to] = scene.time.match(/(\d+)-(\d+)s/); assert.equal(Number(from), end); end = Number(to); }
   assert.ok(end >= 30 && end <= 45);
+});
+
+// Captured from real Nebius Lightning, Korean, finish_reason=stop, reasoning_tokens=0.
+// The model nested all siblings under pdp. The old parser silently returned [needs info].
+test('recorded real Nemotron response is rejected then repaired once without placeholders', async () => {
+  const recorded = {
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null,
+      "message": {
+        "content": "{\"pdp\": {\"headline\": \"대나무 도마, 주방의 새로운 친구\", \"subheadline\": \"내추럴한 색감과 부드러운 터치로 식탁을 밝게\", \"bullets\": [\"내구성이 뛰어난 대나무 소재로 오랜 사용 가능\", \"모서리가 둥근 디자인으로 안전하게 보관 가능\", \"손세척 후 세워서 건조하면 위생적 관리 가능\", \"30 x 20 x 1.5cm 적당한 크기로 주방 공간 활용도 높음\", \"내추럴 색상이 다양한 주방 인테리어와 잘 어울림\"], \"description\": [\"대나무 도마는 자연스러운 무늬와 따뜻한 느낌을 주는 주방 아이템입니다.\", \"내추럴 색상은 주방의 분위기를 밝고 깨끗하게 연출해 줍니다.\", \"둥근 모서리 디자인은 아이들이 있는 가정에서도 안전하게 사용할 수 있습니다.\", \"적당한 크기로 반찬 준비나 과일 썰기 등 다양한 용도에 적합합니다.\", \"손세척 후 세워서 건조하면 물이 잘 빠져 위생적으로 관리할 수 있습니다.\"], \"faq\": [{\"question\": \"식기세척기에 넣을 수 있나요?\", \"answer\": \"아니요, 식기세척기 사용이 불가합니다. 손세척 후 물기를 제거해 주세요.\"}, {\"question\": \"어떻게 보관해야 하나요?\", \"answer\": \"사용 후 물기를 잘 제거하고 세워서 건조하는 것이 좋습니다.\"}, {\"question\": \"칼자국이 많이 남지 않나요?\", \"answer\": \"대나무 소재는 칼자국이 비교적 적게 남으며, 정기적으로 관리하면 오래 사용하실 수 있습니다.\"}, {\"question\": \"무게는 얼마나 나가나요?\", \"answer\": \"가벼워서 이동하기 편하며, 주방에서 사용하기 부담 없는 무게입니다.\"}, {\"question\": \"색상이 변색되나요?\", \"answer\": \"직사광선을 피하고 그늘에서 보관하면 색상 변형을 최소화할 수 있습니다.\"}], \"ads\": {\"headlines\": [\"친환경 대나무 도마\", \"주방 필수 아이템\", \"내추럴한 주방 인테리어\"], \"bodies\": [\"내추럴한 색감으로 주방을 밝게 만들어보세요.\", \"모서리가 둥라 안전한 대나무 도마, 지금 만나보세요.\"], \"keywords\": [\"대나무 도마\", \"주방용품\", \"내추럴\"]}, \"shorts\": {\"hook\": \"주방의 분위기를 바꿔보세요!\", \"scenes\": [{\"time\": \"0-3s\", \"visual\": \"대나무 도마의 내추럴한 색상과 질감 특근\", \"voiceover\": \"주방에 새로운 친구를 데려오세요!\", \"caption\": \"대나무 도마, 주방의 새로운 친구\"}, {\"time\": \"3-15s\", \"visual\": \"도마 위에 과일과 채소를 썬 모습\", \"voiceover\": \"둥근 모서리로 안전하게, 일상 속 편리함을 더하세요.\", \"caption\": \"안전하고 편리한 주방 타임\"}, {\"time\": \"15-30s\", \"visual\": \"손세척 후 세워서 건조하는 모습\", \"voiceover\": \"손세척 후 세워서 건조하면 위생적 관리 끝!\", \"caption\": \"간편한 관리법 공개\"}], \"cta\": \"지금 바로 만나보세요!\"}, \"thumbnails\": [{\"text\": \"내추럴 도마\", \"angle\": \"정면 정면 촬영\"}, {\"text\": \"둥근 모서리\", \"angle\": \"모서리 클로즈업\"}, {\"text\": \"과일 썰기\", \"angle\": \"도마 위에 과일 올려놓기\"}], \"listingCheck\": [{\"priority\": \"high\", \"issue\": \"가격 정보가 명시되지 않음\", \"fix\": \"상세 페이지에 판매가 18000원 명시\"}, {\"priority\": \"medium\", \"issue\": \"배송 및 반품 조건 누락\", \"fix\": \"배송료, 배송 기간, 반품 가능 여부 안내 추가\"}, {\"priority\": \"low\", \"issue\": \"인증 정보 부재\", \"fix\": \"필요 시 KC 인증 마크 등 표시 권장\"}]}, \"ad_budget_estimate_krw\": 50000, \"ad_budget_period\": \"daily\"}",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": null,
+        "reasoning": null,
+        "reasoning_content": null
+      },
+      "stop_reason": null,
+      "token_ids": null
+    }
+  ],
+  "model": "nvidia/Nemotron-3_5-Lightning",
+  "object": "chat.completion",
+  "moderation": null,
+  "service_tier": null,
+  "system_fingerprint": null,
+  "usage": {
+    "completion_tokens": 993,
+    "prompt_tokens": 615,
+    "total_tokens": 1608,
+    "completion_tokens_details": {
+      "accepted_prediction_tokens": null,
+      "audio_tokens": null,
+      "reasoning_tokens": 0,
+      "rejected_prediction_tokens": null
+    },
+    "prompt_tokens_details": null,
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 615
+  },
+  "prompt_logprobs": null,
+  "prompt_token_ids": null,
+  "kv_transfer_params": null,
+  "ec_transfer_params": null
+};
+  assert.equal(recorded.choices[0].finish_reason, 'stop');
+  assert.throws(() => parseBundle(recorded.choices[0].message.content), /Invalid content bundle at ads/);
+  let calls = 0;
+  const bundle = await generateBundle(SAMPLE_PRODUCT, { provider: 'nebius', apiKey: 'mock', fetchImpl: async (_url, init) => {
+    const body = JSON.parse(init.body); calls++;
+    assert.deepEqual(body.response_format.json_schema.schema, BUNDLE_JSON_SCHEMA);
+    if (calls === 1) return response(recorded);
+    assert.match(body.messages[0].content, /Previous response failed:/);
+    assert.equal(body.model, 'nvidia/nemotron-3-super-120b-a12b');
+    return response({ choices: [{ message: { content: JSON.stringify(DEMO_BUNDLE) } }] });
+  } });
+  assert.equal(calls, 2); assert.equal(bundle.ads.headlines.length, 3);
+  assert.doesNotMatch(JSON.stringify(bundle), /needs info/);
+  let failedCalls = 0;
+  await assert.rejects(generateBundle(SAMPLE_PRODUCT, { apiKey: 'mock', fetchImpl: async () => { failedCalls++; return response(recorded); } }), /Invalid/);
+  assert.equal(failedCalls, 2);
+});
+test('compatible Nemotron requests disable thinking and reject truncated or reasoning-only output', async () => {
+  for (const [provider, baseUrl] of [['openai', 'https://api.tokenfactory.nebius.com/v1/'], ['nebius', undefined]]) {
+    await callLLM({ provider, baseUrl, apiKey: 'mock', model: 'nvidia/Nemotron-3_5-Lightning', fetchImpl: async (_url, init) => {
+      const body = JSON.parse(init.body);
+      assert.equal(body.max_tokens, 12000); assert.equal(body.chat_template_kwargs.enable_thinking, false);
+      assert.equal(body.response_format.type, 'json_object');
+      return response({ choices: [{ message: { content: '{}' }, finish_reason: 'stop' }] });
+    } });
+  }
+  for (const choice of [{ message: { content: '{"pdp":' }, finish_reason: 'length' }, { message: { content: null, reasoning_content: '{}' } }]) {
+    await assert.rejects(callLLM({ apiKey: 'mock', fetchImpl: async () => response({ choices: [choice] }) }), /truncated|no text/);
+  }
+});
+test('repair is limited and does not retry auth errors or cancellation', async () => {
+  let calls = 0;
+  await assert.rejects(withContentRetry(async () => { calls++; throw new Error('nebius HTTP 401: Invalid API key'); }, parseBundle), /401/);
+  assert.equal(calls, 1);
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(withContentRetry(async () => { calls++; }, parseBundle, { signal: controller.signal }));
+  assert.equal(calls, 1);
+});
+
+test('observed unsupported claims trigger validation', () => {
+  assert.throws(() => validateCopy({ ads: { bodies: ['스테인리스라 위생적이고 튼튼해요.'] } }, SAMPLE_PRODUCT), /unsupported benefit/);
 });
