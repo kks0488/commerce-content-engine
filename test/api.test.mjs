@@ -122,3 +122,11 @@ test('server distinguishes input validation from live upstream failure and suppr
   const factLimit = await invoke(createHandler({ env: {}, run: async () => { throw new Error('Fact Guard accepts up to 64 source facts.'); } }));
   assert.equal(factLimit.statusCode, 400);
 });
+
+test('hosted copy model override leaves the tournament draft routing independent', async () => {
+  const env = { NEBIUS_API_KEY: 'TEST_ONLY', NEBIUS_DRAFT_MODEL: 'tournament-writer', NEBIUS_COPY_MODEL: 'copy-writer' };
+  const copy = await invoke(createHandler({ env }), { method: 'GET' });
+  const tournament = await invoke(createHandler({ env, tournament: true }), { method: 'GET' });
+  assert.equal(copy.body.models.draft, 'copy-writer');
+  assert.equal(tournament.body.models.draft, 'tournament-writer');
+});

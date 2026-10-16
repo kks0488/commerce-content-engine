@@ -13,7 +13,7 @@ export function createHandler({ env = process.env, run = runFactGuard, now = Dat
     res.setHeader('X-Content-Type-Options', 'nosniff');
     const reply = (code, data) => res.status(code).json(data);
     if (req.method === 'GET') return reply(200, { mode: env.NEBIUS_API_KEY || env.LLM_API_KEY ? 'live' : 'demo',
-      models: { draft: env.NEBIUS_DRAFT_MODEL || env.LLM_MODEL || NEMOTRON_MODELS.lightning,
+      models: { draft: (!tournament && env.NEBIUS_COPY_MODEL) || env.NEBIUS_DRAFT_MODEL || env.LLM_MODEL || NEMOTRON_MODELS.lightning,
         verify: env.NEBIUS_VERIFY_MODEL || NEMOTRON_MODELS.super,
         ...(tournament ? { judge: env.NEBIUS_JUDGE_MODEL || NEMOTRON_MODELS.super } : {}) },
       ...(tournament ? { concurrency: 6, maxActive: 2, maxCount: 32 } : {}) });
@@ -63,7 +63,7 @@ export function createHandler({ env = process.env, run = runFactGuard, now = Dat
       const apiKey = env.NEBIUS_API_KEY || env.LLM_API_KEY;
       // The client cannot choose a URL, model, key or round budget on the hosted route.
       const options = { apiKey, provider: 'nebius', baseUrl: env.LLM_BASE_URL,
-        draftModel: env.NEBIUS_DRAFT_MODEL || env.LLM_MODEL || NEMOTRON_MODELS.lightning,
+        draftModel: (!tournament && env.NEBIUS_COPY_MODEL) || env.NEBIUS_DRAFT_MODEL || env.LLM_MODEL || NEMOTRON_MODELS.lightning,
         verifyModel: env.NEBIUS_VERIFY_MODEL || NEMOTRON_MODELS.super, deadlineMs: 280000, maxRounds: 2 };
       if (tournament) Object.assign(options, { count: body.count ?? 16, concurrency: 6,
         judgeModel: env.NEBIUS_JUDGE_MODEL || NEMOTRON_MODELS.super });

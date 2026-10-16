@@ -84,7 +84,7 @@ test('live pipeline drafts, verifies, revises and verifies with efficient model 
       const body = JSON.parse(request.body); calls.push(body);
       const payload = JSON.parse(body.messages[1].content);
       if (body.model === NEMOTRON_MODELS.super) return response(reviewer(payload.fields, payload.facts, calls.length === 2), body.model);
-      return response(content(calls.length === 1 ? 'Lifetime cure guarantee' : 'Test Cup'), body.model);
+      return response(content(calls.length === 1 ? 'Capacity: 600 ml.' : 'Test Cup'), body.model);
     } });
   const guard = result.factGuard;
   assert.deepEqual(calls.map(c => c.model), [NEMOTRON_MODELS.lightning, NEMOTRON_MODELS.super, NEMOTRON_MODELS.lightning, NEMOTRON_MODELS.super]);
@@ -93,8 +93,8 @@ test('live pipeline drafts, verifies, revises and verifies with efficient model 
   assert.equal(revision.review.length, 1);
   assert.equal(revision.review[0].status, 'risky');
   assert.deepEqual(revision.facts, sourceFacts(input));
-  assert.equal(guard.before.pdp.headline, 'Lifetime cure guarantee');
-  assert.deepEqual(guard.changes, [{ path: 'pdp.headline', before: 'Lifetime cure guarantee', after: 'Test Cup' }]);
+  assert.equal(guard.before.pdp.headline, 'Capacity: 600 ml.');
+  assert.deepEqual(guard.changes, [{ path: 'pdp.headline', before: 'Capacity: 600 ml.', after: 'Test Cup' }]);
   assert.equal(guard.mode, 'live'); assert.equal(guard.trustScore, 100); assert.equal(guard.needsReview, false);
   assert.equal(guard.history.length, 2); assert.equal(guard.totals.totalTokens, 500); assert.equal(guard.totals.usageComplete, true);
   assert.equal(progress.length, 8);
@@ -218,13 +218,31 @@ test('Fact Guard rejects repeated incomplete drafts instead of manufacturing pla
   assert.equal(calls, 2);
 });
 
-test('live Fact Guard replaces missing FAQ slots with known labeled source facts before auditing', async () => {
+test('live Fact Guard repairs caveat leakage before auditing and preserves exact accepted model JSON', async () => {
+  let drafts = 0;
+  const raw = JSON.stringify(content(), null, 2);
   const result = await runFactGuard(input, { apiKey: fakeKey, maxRounds: 0, fetchImpl: async (_url, init) => {
     const body = JSON.parse(init.body), payload = JSON.parse(body.messages[1].content);
     if (payload.fields) return response(reviewer(payload.fields, payload.facts), body.model);
-    const bundle = content(); bundle.pdp.faq[0] = { question: 'Is it leakproof?', answer: '[needs info] Tested leak resistance is not supplied.' };
-    return response(bundle, body.model);
+    drafts++;
+    if (drafts === 1) {
+      const b = content(); b.pdp.faq[0] = { question: 'Is it leakproof?', answer: 'Leak resistance is not confirmed.' };
+      return response(b, body.model);
+    }
+    assert.match(body.messages[0].content, /unknown-attribute leakage/);
+    return { ok: true, text: async () => JSON.stringify({ model: body.model, choices: [{ message: { content: raw }, finish_reason: 'stop' }], usage }) };
   } });
-  assert.equal(result.pdp.faq[0].answer, '500 ml.');
-  assert.doesNotMatch(JSON.stringify(result.pdp.faq), /needs info/);
+  assert.equal(drafts, 2);
+  assert.equal(result.factGuard.rawOutput.text, raw);
+  assert.equal(result.factGuard.rawOutput.model, NEMOTRON_MODELS.super);
+  assert.deepEqual(result.pdp, JSON.parse(raw).pdp);
+  assert.deepEqual(result.factGuard.steps.map(s => s.step), ['draft', 'draft', 'verify']);
+});
+
+test('repeated headline rubric failures stop after one repair and never reach the verifier', async () => {
+  let calls = 0;
+  await assert.rejects(runFactGuard(input, { apiKey: fakeKey, fetchImpl: async (_url, init) => {
+    calls++; return response(content('a'.repeat(41)), JSON.parse(init.body).model);
+  } }), /headline length/);
+  assert.equal(calls, 2);
 });

@@ -12,6 +12,8 @@ Quick start (Node 18+, no dependencies):
 ```sh
 npm test
 node cli.mjs --demo
+# Hosted branch: reproduce one production round with 3 fictional products:
+QA_OUTPUT=/tmp/cce-raw QA_SET=my-gate QA_ROUND=1 node scripts/quality-gate.mjs production
 NEBIUS_API_KEY="$NEBIUS_API_KEY" node cli.mjs --provider nebius --name "Steel cup" --info "500 ml; stainless steel; removable lid; hand wash" --lang English
 ```
 
@@ -25,8 +27,8 @@ flowchart LR
 
 **Nemotron on Nebius**
 
-- Lightning drafts through the Token Factory API with strict JSON Schema and thinking off. Invalid copy gets one Super repair attempt; missing FAQ slots use labeled seller facts.
+- The hosted demo uses Nemotron Super for drafting with reasoning and factual review, through the Token Factory API with strict JSON Schema. Original Korean/English examples guide benefit framing; length, claim, completeness and caveat checks trigger one model repair. Unknowns stay in seller listing checks.
 - On the hosted branch, Super reviews factual claims; the tournament gates ads before simulated buyer comparisons.
-- Built during the hackathon: CLI, browser editor, Fact Guard, tournament, hosted demo and real-response regression checks. AI review uses seller facts and still needs editorial judgment.
+- Built during the hackathon: CLI, browser editor, Fact Guard, tournament, hosted demo and real-response regression checks. Accepted model JSON is preserved without FAQ replacement. AI review uses seller facts and still needs editorial judgment.
 
 MIT © 2026 Kyoungsoo Kim. See [LICENSE](LICENSE).
