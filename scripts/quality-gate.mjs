@@ -3,7 +3,7 @@ import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { runFactGuard, NEMOTRON_MODELS } from '../src/fact-guard.js';
-import { normalizeInput, parseBundle, validateCopy, bundleToMarkdown } from '../src/core.js';
+import { normalizeInput, parseBundle, validateCopy } from '../src/core.js';
 import { estimateCost } from '../src/tournament.js';
 
 export const products = [
@@ -24,6 +24,19 @@ try { manifest = JSON.parse(await readFile(manifestFile, 'utf8')); }
 catch { manifest = { set, mode, products, calls: Number(process.env.QA_PRIOR_CALLS || 0), budget: 80, runs: [] }; }
 const save = () => writeFile(manifestFile, JSON.stringify(manifest, null, 2) + '\n');
 const hash = text => createHash('sha256').update(text).digest('hex');
+function rawMarkdown(b, input, header) {
+  // Rendering only: every model-written value appears verbatim. No editorial replacements.
+  return [header, `# ${input.product_name}`, '## Product page', `**${b.pdp.headline}** — ${b.pdp.subheadline}`,
+    ...b.pdp.bullets.map(v => `- ${v}`), ...b.pdp.description,
+    ...b.pdp.faq.map(v => `Q: ${v.question} | A: ${v.answer}`),
+    '## Ads', `Headlines: ${b.ads.headlines.join(' | ')}`, ...b.ads.bodies.map(v => `- ${v}`), b.ads.keywords.join(' '),
+    `## Shorts | Hook: ${b.shorts.hook}`,
+    ...b.shorts.scenes.map(v => `${v.time} | Visual: ${v.visual} | Voiceover: ${v.voiceover} | Caption: ${v.caption}`),
+    `CTA: ${b.shorts.cta}`, '## Thumbnails', b.thumbnails.map(v => `${v.text} | ${v.angle}`).join(' • '),
+    '## Listing check', ...b.listingCheck.map(v => `${v.priority}: ${v.issue} | Fix: ${v.fix}`),
+  ].join('\n') + '\n';
+}
+
 async function record(id, input, response, responseText, latencyMs) {
   const timestamp = new Date().toISOString();
   const guard = response.factGuard;
@@ -39,7 +52,7 @@ async function record(id, input, response, responseText, latencyMs) {
   const stem = resolve(output, `${set}-${id}`);
   await writeFile(stem + '.json', raw);
   await writeFile(stem + '.response.json', responseText);
-  await writeFile(stem + '.md', `RAW model output, unedited, ${timestamp}, model ids: ${models.join(', ')}\n\n` + bundleToMarkdown(parsed, input));
+  await writeFile(stem + '.md', rawMarkdown(JSON.parse(raw), input, `RAW model output, unedited, ${timestamp}, model ids: ${models.join(', ')}`));
   const entry = { id, input, timestamp, models, rawModel: guard.rawOutput.model, rawSha256: hash(raw), responseSha256: hash(responseText),
     liveCalls: guard.steps.length, latencyMs, costUsd: guard.steps.reduce((n, s) => n + (estimateCost(s.model, s.usage) || 0), 0),
     trustScore: guard.trustScore, needsReview: guard.needsReview, steps: guard.steps, automatedRubric: 'PASS', editorialReview: 'PENDING' };
@@ -53,7 +66,8 @@ if (mode === 'benchmark') {
   for (const model of (process.env.QA_DRAFT_MODELS ? process.env.QA_DRAFT_MODELS.split(',') : [NEMOTRON_MODELS.lightning, NEMOTRON_MODELS.super])) {
     const started = performance.now();
     try {
-    const result = await runFactGuard(products[0], { apiKey: process.env.NEBIUS_API_KEY, draftModel: model, maxRounds: 1,
+    const input = products.find(p => p.id === process.env.QA_PRODUCT) || products[0];
+    const result = await runFactGuard(input, { apiKey: process.env.NEBIUS_API_KEY, draftModel: model, maxRounds: Number(process.env.QA_MAX_ROUNDS || 1),
       fetchImpl: async (...args) => {
         if (manifest.calls >= manifest.budget) throw new Error('Live-call budget exhausted.');
         manifest.calls++; await save();
@@ -61,26 +75,63 @@ if (mode === 'benchmark') {
         await writeFile(resolve(output, `${set}-call${manifest.calls}.response.json`), await response.clone().text());
         return response;
       } });
-    await record(`${model === NEMOTRON_MODELS.lightning ? 'lightning-board' : 'super-board'}-call${manifest.calls}`, products[0], result, JSON.stringify(result), Math.round(performance.now() - started));
+    await record(`${input.id}-call${manifest.calls}`, input, result, JSON.stringify(result), Math.round(performance.now() - started));
     } catch (error) { console.log(JSON.stringify({ model, benchmarkFailure: error.message, callsSoFar: manifest.calls, latencyMs: Math.round(performance.now() - started) })); }
   }
 } else if (mode === 'production') {
   const endpoint = process.env.QA_ENDPOINT || 'https://commerce-content-engine-nemotron.vercel.app/api/fact-guard';
   const round = Number(process.env.QA_ROUND || 1);
-  for (const input of products) {
-    // A hosted request can use at most 9 calls (three generation stages with one retry each + three verifiers).
-    if (manifest.calls + 9 > manifest.budget) throw new Error('Insufficient live-call budget for another hosted request.');
-    const started = performance.now();
-    const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: AbortSignal.timeout(295000) });
-    const text = await response.text();
-    if (response.status === 429) throw new Error(`Production rate limited. Retry-After: ${response.headers.get('retry-after')}`);
-    const data = JSON.parse(text);
-    if (!response.ok || !data.factGuard || data.factGuard.fallback) {
-      manifest.calls += 9; await save();
-      await writeFile(resolve(output, `${set}-round${round}-${input.id}-FAILED.response.json`), text);
-      throw new Error(`Production generation failed (HTTP ${response.status}); reserved 9 calls conservatively.`);
+  let browser;
+  try {
+    if (process.env.QA_BROWSER === '1') {
+      const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+      browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH, args: ['--no-sandbox'] });
     }
-    manifest.calls += data.factGuard.steps.length; await save();
-    await record(`round${round}-${input.id}`, input, data, text, Math.round(performance.now() - started));
-  }
+    for (const input of products) {
+      const id = `round${round}-${input.id}`;
+      if (manifest.runs.some(run => run.id === id)) { console.log(`Already captured: ${id}`); continue; }
+      // Reserve the maximum up front; a network failure cannot silently lose budget accounting.
+      if (manifest.calls + 6 > manifest.budget) throw new Error('Insufficient live-call budget for another hosted request.');
+      manifest.calls += 6; manifest.pendingRequest = { id, started: new Date().toISOString() }; await save();
+      const started = performance.now();
+      let status, text, retryAfter, page;
+      if (browser) {
+        page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+        await page.goto(new URL('/?fact-guard', endpoint).href);
+        await page.waitForFunction(() => document.querySelector('#connection-fields').hidden);
+        for (const [key, value] of Object.entries(normalizeInput(input))) {
+          const field = page.locator(`#product-form [name="${key}"]`);
+          if (!await field.count()) continue;
+          if (await field.evaluate(el => el.tagName === 'SELECT')) await field.selectOption(String(value));
+          else await field.fill(value == null ? '' : String(value));
+        }
+        const pending = page.waitForResponse(r => r.url() === endpoint && r.request().method() === 'POST', { timeout: 295000 });
+        await page.locator('#generate').click();
+        const response = await pending; status = response.status(); text = await response.text(); retryAfter = response.headers()['retry-after'];
+      } else {
+        const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: AbortSignal.timeout(295000) });
+        status = response.status; text = await response.text(); retryAfter = response.headers.get('retry-after');
+      }
+      if (status === 429) {
+        manifest.calls -= 6; delete manifest.pendingRequest; await save();
+        throw new Error(`Production rate limited. Retry-After: ${retryAfter}`);
+      }
+      // Always save exact response bytes, including failures, before parsing or checking.
+      await writeFile(resolve(output, `${set}-${id}.response.json`), text);
+      const data = JSON.parse(text);
+      delete manifest.pendingRequest;
+      if (status !== 200 || !data.factGuard || data.factGuard.fallback) {
+        await save(); throw new Error(`Production generation failed (HTTP ${status}); reserved 6 calls conservatively.`);
+      }
+      manifest.calls += data.factGuard.steps.length - 6; await save();
+      await record(id, input, data, text, Math.round(performance.now() - started));
+      if (page) {
+        await page.locator('#tab-pdp').click();
+        await page.locator('#panel-pdp').scrollIntoViewIfNeeded();
+        await page.screenshot({ path: resolve('media', `quality-production-${id}.png`) });
+        console.log(`Real production UI captured: ${id}`);
+        await page.close();
+      }
+    }
+  } finally { await browser?.close(); }
 } else throw new Error('Use benchmark or production.');

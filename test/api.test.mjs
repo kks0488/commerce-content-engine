@@ -37,7 +37,7 @@ test('server uses environment routing and ignores all client credentials, models
   const { onProgress, signal, ...routing } = captured.options;
   assert.equal(typeof onProgress, 'function'); assert.ok(signal instanceof AbortSignal);
   assert.deepEqual(routing, { apiKey: fakeKey, provider: 'nebius', baseUrl: 'https://example.invalid/v1/',
-    draftModel: 'server-draft', verifyModel: 'server-verify', deadlineMs: 280000, maxRounds: 2 });
+    draftModel: 'server-draft', verifyModel: 'server-verify', deadlineMs: 280000, maxRounds: 1 });
   assert.equal(result.body.factGuard.mode, 'live'); assert.ok(!JSON.stringify(result.body).includes(fakeKey));
 });
 

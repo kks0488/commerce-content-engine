@@ -5,6 +5,8 @@ import { NEMOTRON_MODELS, sourceFacts, parseClaimTrace, scoreClaims, VERIFY_SYST
 export const PRICES = Object.freeze({
   [NEMOTRON_MODELS.lightning]: { input: 0.06, output: 0.24 },
   [NEMOTRON_MODELS.super]: { input: 0.30, output: 0.90 },
+  'Qwen/Qwen3.5-397B-A17B': { input: 0.60, output: 3.60 },
+  'deepseek-ai/DeepSeek-V4.1-Flash': { input: 0.30, output: 1.20 },
   [NEMOTRON_MODELS.ultra]: { input: 1, output: 3 },
 });
 export const DIRECTIONS = ['Detail first', 'Everyday ritual', 'Minimalist edit', 'Buyer checklist', 'Material story', 'Desk companion', 'Close-up reveal', 'Care conscious', 'Unboxing moment', 'Quiet luxury', 'Straight talk', 'Playful discovery', 'Morning reset', 'Design details', 'Practical choice', 'Product spotlight'];

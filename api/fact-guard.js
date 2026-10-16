@@ -64,7 +64,7 @@ export function createHandler({ env = process.env, run = runFactGuard, now = Dat
       // The client cannot choose a URL, model, key or round budget on the hosted route.
       const options = { apiKey, provider: 'nebius', baseUrl: env.LLM_BASE_URL,
         draftModel: (!tournament && env.NEBIUS_COPY_MODEL) || env.NEBIUS_DRAFT_MODEL || env.LLM_MODEL || NEMOTRON_MODELS.lightning,
-        verifyModel: env.NEBIUS_VERIFY_MODEL || NEMOTRON_MODELS.super, deadlineMs: 280000, maxRounds: 2 };
+        verifyModel: env.NEBIUS_VERIFY_MODEL || NEMOTRON_MODELS.super, deadlineMs: 280000, maxRounds: tournament ? 2 : 1 };
       if (tournament) Object.assign(options, { count: body.count ?? 16, concurrency: 6,
         judgeModel: env.NEBIUS_JUDGE_MODEL || NEMOTRON_MODELS.super });
       if (tournament && active >= 2) { res.setHeader('Retry-After', '15'); return reply(429, { error: 'Two tournaments are already running. Try again shortly.' }); }

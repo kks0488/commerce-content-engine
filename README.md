@@ -27,8 +27,8 @@ flowchart LR
 
 **Nemotron on Nebius**
 
-- The hosted demo uses Nemotron Super for drafting with reasoning and factual review, through the Token Factory API with strict JSON Schema. Original Korean/English examples guide benefit framing; length, claim, completeness and caveat checks trigger one model repair. Unknowns stay in seller listing checks.
-- On the hosted branch, Super reviews factual claims; the tournament gates ads before simulated buyer comparisons.
+- The hosted bundle uses DeepSeek V4.1 Flash for writing and Nemotron Super for factual review on Nebius Token Factory, with strict JSON Schema. Original Korean/English examples guide benefit framing; length, claim, completeness and caveat checks trigger one model repair. Unknowns stay in seller listing checks.
+- On the hosted branch, Nemotron Super reviews factual claims; the tournament gates ads before simulated buyer comparisons.
 - Built during the hackathon: CLI, browser editor, Fact Guard, tournament, hosted demo and real-response regression checks. Accepted model JSON is preserved without FAQ replacement. AI review uses seller facts and still needs editorial judgment.
 
 MIT © 2026 Kyoungsoo Kim. See [LICENSE](LICENSE).

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PROVIDERS, callLLM, bundleToMarkdown } from '../src/core.js';
-import { runFactGuard, parseClaimTrace, scoreClaims, sourceFacts, bundleFields, NEMOTRON_MODELS, FACT_GUARD_SAMPLE } from '../src/fact-guard.js';
+import { runFactGuard, parseClaimTrace, scoreClaims, sourceFacts, bundleFields, NEMOTRON_MODELS, FACT_GUARD_SAMPLE, claimTraceSchema } from '../src/fact-guard.js';
 
 const input = { product_name: 'Test Cup', product_info: 'Capacity: 500 ml.\nMaterial: steel.', language: 'English' };
 const fakeKey = 'TEST_ONLY_NEBIUS_PLACEHOLDER';
@@ -245,4 +245,14 @@ test('repeated headline rubric failures stop after one repair and never reach th
     calls++; return response(content('a'.repeat(41)), JSON.parse(init.body).model);
   } }), /headline length/);
   assert.equal(calls, 2);
+});
+
+test('verifier schema requires one explained review per field before semantic citation checks', () => {
+  const fields = [{ path: 'pdp.headline', claim: 'Your desk companion' }];
+  const schema = claimTraceSchema(fields, [{ id: 'F0', text: 'Cup' }]);
+  const claims = schema.properties.claims;
+  assert.equal(claims.minItems, 1); assert.equal(claims.maxItems, 1);
+  assert.equal(claims.items.properties.reason.minLength, 1);
+  assert.deepEqual(claims.items.properties.path.enum, ['pdp.headline']);
+  assert.ok(claims.items.required.includes('sources'));
 });

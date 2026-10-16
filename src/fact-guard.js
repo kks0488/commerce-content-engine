@@ -63,6 +63,17 @@ export function parseClaimTrace(text, facts, fields) {
   });
 }
 
+// A strict envelope prevents silent empty-reason audits. Semantic citation checks still fail closed.
+export function claimTraceSchema(fields, facts) {
+  const record = properties => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+  const text = { type: 'string', minLength: 1 };
+  return record({ claims: { type: 'array', minItems: fields.length, maxItems: fields.length, items: record({
+    path: { type: 'string', enum: fields.map(f => f.path) }, claim: text, factual: { type: 'boolean' },
+    status: { type: 'string', enum: ['supported', 'unsupported', 'risky'] },
+    sources: { type: 'array', items: record({ id: { type: 'string', enum: facts.map(f => f.id) }, quote: text }) }, reason: text,
+  }) } });
+}
+
 export function scoreClaims(claims) {
   const factual = claims.filter(c => c.factual);
   const supported = factual.filter(c => c.status === 'supported').length;
@@ -89,7 +100,8 @@ food/drink/outfit scenes, invitations to view/add to cart, or subjective visual 
 Material alone NEVER establishes hygiene, durability, softness, breathability, comfort, thermal retention or safety.
 Unknown-attribute caveats must appear ONLY in listingCheck; flag them elsewhere, including FAQ and narration.
 Listing checks are seller instructions to obtain evidence, not assertions that the product has that property.
-A field with multiple assertions takes the WORST status. Do not output a score. Do not omit any field.`;
+Also review publication quality without suppressing ordinary benefit framing. Mark a field unsupported with an editorial reason if it is clearly lifeless spec repetition, unnatural or mixed-language writing, an awkward CTA, an unanswerable FAQ, or a weak generic hook. Headlines must sell a moment or reason to care, not just restate product name/material/dimensions. Ad headlines should cover distinct angles. Korean friendly copy must consistently use 해요체 and natural particles; English must be idiomatic. Listing checks must not describe supplied facts as missing. These are editorial failures, not evidence of a new product fact.
+A field with multiple assertions takes the WORST status. Do not output a score. Do not omit any field. Every reason must be a nonempty, specific explanation (even for creative fields).`;
 
 function demoBundle(input, facts, revised = false) {
   const f = facts.slice(1).map(f => f.text);
@@ -162,9 +174,9 @@ export async function runFactGuard(raw, options = {}) {
       result = { text: response.choices[0].message.content, model, usage: response.usage };
     } else result = await callLLM({ provider: options.provider || 'nebius', apiKey: options.apiKey,
       baseUrl: options.baseUrl, fetchImpl: options.fetchImpl, model, ...messages,
-      temperature: name === 'verify' ? 0 : 0.25,
+      temperature: name === 'verify' ? 0.2 : 0.35,
       enableThinking: name !== 'verify' && /nemotron-3-super/i.test(model),
-      maxTokens: name === 'verify' ? 14000 : 12000, jsonSchema: name === 'verify' ? undefined : BUNDLE_JSON_SCHEMA, detailed: true, timeoutMs: Math.min(90000, remaining), signal: options.signal });
+      maxTokens: name === 'verify' ? 14000 : 12000, jsonSchema: name === 'verify' ? claimTraceSchema(JSON.parse(messages.user).fields, facts) : BUNDLE_JSON_SCHEMA, detailed: true, timeoutMs: Math.min(90000, remaining), signal: options.signal });
     const record = { step: name, round, model: result.model, latencyMs: Math.round(performance.now() - started),
       usage: result.usage, usageEstimated: mode === 'demo', state: 'complete' };
     steps.push(record); options.onProgress?.(record);
