@@ -1,4 +1,5 @@
 import { runFactGuard, NEMOTRON_MODELS } from '../src/fact-guard.js';
+import { runTournament } from '../src/tournament.js';
 
 export const MAX_BYTES = 16000;
 export const RATE_LIMIT = 5;
@@ -12,10 +13,10 @@ export function createHandler({ env = process.env, run = runFactGuard, now = Dat
     res.setHeader('X-Content-Type-Options', 'nosniff');
     const reply = (code, data) => res.status(code).json(data);
     if (req.method === 'GET') return reply(200, { mode: env.NEBIUS_API_KEY || env.LLM_API_KEY ? 'live' : 'demo',
-      models: { draft: env.NEBIUS_DRAFT_MODEL || env.LLM_MODEL || NEMOTRON_MODELS.nano,
+      models: { draft: env.NEBIUS_DRAFT_MODEL || env.LLM_MODEL || NEMOTRON_MODELS.lightning,
         verify: env.NEBIUS_VERIFY_MODEL || NEMOTRON_MODELS.super,
         ...(tournament ? { judge: env.NEBIUS_JUDGE_MODEL || NEMOTRON_MODELS.super } : {}) },
-      ...(tournament ? { concurrency: 4, maxActive: 2, maxCount: 32 } : {}) });
+      ...(tournament ? { concurrency: 6, maxActive: 2, maxCount: 32 } : {}) });
     if (req.method !== 'POST') { res.setHeader('Allow', 'GET, POST'); return reply(405, { error: 'Use POST to run Fact Guard.' }); }
     // Vercel overwrites x-real-ip at its edge. Local adapter uses socket address.
     const ip = String(req.headers['x-real-ip'] || req.socket?.remoteAddress || 'unknown');
@@ -62,32 +63,51 @@ export function createHandler({ env = process.env, run = runFactGuard, now = Dat
       const apiKey = env.NEBIUS_API_KEY || env.LLM_API_KEY;
       // The client cannot choose a URL, model, key or round budget on the hosted route.
       const options = { apiKey, provider: 'nebius', baseUrl: env.LLM_BASE_URL,
-        draftModel: env.NEBIUS_DRAFT_MODEL || env.LLM_MODEL || NEMOTRON_MODELS.nano,
+        draftModel: env.NEBIUS_DRAFT_MODEL || env.LLM_MODEL || NEMOTRON_MODELS.lightning,
         verifyModel: env.NEBIUS_VERIFY_MODEL || NEMOTRON_MODELS.super, deadlineMs: 280000, maxRounds: 2 };
-      if (tournament) Object.assign(options, { count: body.count ?? 16, concurrency: 4,
+      if (tournament) Object.assign(options, { count: body.count ?? 16, concurrency: 6,
         judgeModel: env.NEBIUS_JUDGE_MODEL || NEMOTRON_MODELS.super });
       if (tournament && active >= 2) { res.setHeader('Retry-After', '15'); return reply(429, { error: 'Two tournaments are already running. Try again shortly.' }); }
       let bundle, streaming = false;
       const controller = new AbortController();
+      const completed = [];
+      options.onProgress = event => {
+        if (event.state === 'complete' && event.usage) completed.push(event);
+        if (streaming && !res.destroyed) res.write(JSON.stringify(event) + '\n');
+      };
       const disconnected = () => { if (!res.writableEnded) controller.abort(); };
+      options.signal = controller.signal;
+      res.on?.('close', disconnected);
       if (tournament) {
-        active++; options.signal = controller.signal;
-        res.on?.('close', disconnected);
+        active++;
         if (String(req.headers.accept || '').includes('application/x-ndjson') && typeof res.write === 'function') {
           streaming = true;
           res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
           res.setHeader('X-Accel-Buffering', 'no'); res.flushHeaders?.();
-          options.onProgress = event => { if (!res.destroyed) res.write(JSON.stringify(event) + '\n'); };
         }
       }
       try { bundle = await run(input, options); }
       catch (error) {
-        if (streaming) { res.write(JSON.stringify({ type: 'error', error: 'Tournament could not complete. Live failures never fall back to demo.' }) + '\n'); return res.end(); }
         if (error.errors || /up to 64 source facts/.test(error.message)) return reply(400, { error: error.message });
-        // No upstream error text is reflected: it could contain secrets or seller inputs.
-        return reply(502, { error: 'Fact Guard could not complete. Check server model access or retry with fewer facts. Live failures never fall back to demo.' });
+        // Never start fixture work after a disconnect, or reflect upstream private text.
+        if (controller.signal.aborted || !apiKey) {
+          const failure = { error: 'Request stopped before completion. No result was confirmed.' };
+          if (streaming) { res.write(JSON.stringify({ type: 'error', ...failure }) + '\n'); return res.end(); }
+          return reply(502, failure);
+        }
+        const notice = 'LIVE REQUEST FAILED · Showing offline deterministic fixtures. This result is DEMO, not live inference. Completed live calls may still incur tokens.';
+        const fallback = { from: 'live', reportedTokensBeforeFailure: completed.reduce((n, s) => n + (s.usage.total_tokens || 0), 0), usageComplete: false };
+        const annotate = result => { const report = tournament ? result : result.factGuard;
+          if (report.fallback) return result;
+          report.notice = `${notice} ${report.notice}`; report.fallback = fallback; return result; };
+        if (streaming) res.write(JSON.stringify({ type: 'fallback', notice }) + '\n');
+        bundle = annotate(await (tournament ? runTournament : runFactGuard)(input, { ...options,
+          apiKey: undefined, demo: true, onProgress: streaming ? event => {
+            if (event.type === 'result') annotate(event.result);
+            if (!res.destroyed) res.write(JSON.stringify(event) + '\n');
+          } : undefined }));
       }
-      finally { if (tournament) { active--; res.removeListener?.('close', disconnected); } }
+      finally { if (tournament) active--; res.removeListener?.('close', disconnected); }
       if (streaming) return res.end();
       return reply(200, bundle);
     } catch { return reply(400, { error: 'Invalid JSON input.' }); }

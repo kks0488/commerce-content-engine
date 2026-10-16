@@ -17,7 +17,7 @@
 
     <section id="tournament" hidden aria-labelledby="tournament-title">
       <div class="arena-heading"><div><div class="arena-eyebrow">FACT GUARD V2 / TOKEN FACTORY</div><h1 id="tournament-title">Many ideas. <em>One survivor.</em></h1><p>Parallel imagination. Evidence at the gate. A champion chosen through buyer personas.</p></div><a href="?fact-guard">Open original Fact Guard ↗</a></div>
-      <div class="arena-toolbar"><span id="arena-mode" class="arena-mode">CHECKING CONNECTION</span><span>NANO <b>→</b> SUPER <b>→</b> SUPER / ULTRA</span><span id="arena-phase" role="status" aria-live="polite">Ready for a new contender.</span></div>
+      <div class="arena-toolbar"><span id="arena-mode" class="arena-mode">CHECKING CONNECTION</span><span>LIGHTNING <b>→</b> SUPER <b>→</b> SUPER</span><span id="arena-phase" role="status" aria-live="polite">Ready for a new contender.</span></div>
       <div class="arena-layout">
         <form id="arena-form" class="arena-input">
           <div class="arena-section-label">01 / THE SOURCE</div><h2>One product.<br>Every angle.</h2>
@@ -27,7 +27,7 @@
           <div class="arena-options"><label>Variants<select id="arena-count"><option value="4">4 · quick round</option><option value="8">8 · fast bracket</option><option value="16" selected>16 · full arena</option><option value="32">32 · double field</option></select></label></div>
           <button id="arena-run" type="submit">Launch tournament <span>↗</span></button>
           <button id="arena-replay" type="button" disabled>Replay this tournament ↺</button>
-          <small>4 concurrent requests per run. Up to 2 active tournaments per server instance. 5 runs / IP / 10 min.</small>
+          <small>6 concurrent requests per run. Up to 2 active tournaments per server instance. 5 runs / IP / 10 min.</small>
           <p id="arena-error" role="alert" hidden></p>
         </form>
         <div class="arena-field"><div class="arena-grid-heading"><span class="arena-section-label">02 / THE CREATIVE FIELD</span><span id="arena-survivors">16 contenders · awaiting launch</span></div><div id="arena-grid" class="arena-grid" aria-label="Ad creative variants"></div><p class="arena-legend"><span>● Generating</span><span>● Verified</span><span>× Eliminated</span><span>★ Winner</span></p></div>
@@ -44,8 +44,8 @@
         <form id="product-form" novalidate>
           <fieldset class="guard-config"><legend>Fact Guard <span class="guard-new">NEMOTRON</span></legend>
             <label class="guard-toggle"><input id="fact-guard" type="checkbox"><span data-i18n="guardEnable">Verify every claim before you publish</span></label>
-            <p class="guard-route">Nano drafts <span>→</span> Super verifies <span>→</span> Nano revises</p>
-            <label><span data-i18n="verifier">Verification model</span><select id="verifier"><option value="super">Nemotron Super · reasoning</option><option value="ultra">Nemotron Ultra · deeper review (BYO key)</option></select></label>
+            <p class="guard-route">Lightning drafts <span>→</span> Super verifies <span>→</span> Lightning revises</p>
+            <label><span data-i18n="verifier">Verification model</span><select id="verifier"><option value="super">Nemotron Super · reasoning</option></select></label>
             <small id="guard-connection" data-i18n="guardLocal">Use your Nebius key for live inference. Without a key, Fact Guard replays offline fixtures.</small>
           </fieldset>
           <fieldset id="connection-fields"><legend data-i18n="connection">Connect your AI</legend>

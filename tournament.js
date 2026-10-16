@@ -15,22 +15,21 @@ function init() {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const delay = ms => reduced ? Promise.resolve() : new Promise(resolve => setTimeout(resolve, ms));
   const money = value => value === null || value === undefined ? 'Unavailable' : `$${value.toFixed(5)}`;
-  const modelLabel = model => model?.toLowerCase().includes('nano') ? 'Nano' : model?.toLowerCase().includes('ultra') ? 'Ultra' : model?.toLowerCase().includes('super') ? 'Super' : model || '—';
   const connection = fetch('/api/tournament', { signal: AbortSignal.timeout(4000) }).then(r => r.ok ? r.json() : null).then(data => {
     if (data && ['demo', 'live'].includes(data.mode)) { hosted = true; mode = data.mode; }
-  }).catch(() => {}).finally(() => { $('#arena-mode').textContent = mode === 'demo' ? 'DEMO / OFFLINE FIXTURES' : 'LIVE / TOKEN FACTORY'; });
+  }).catch(() => {}).finally(() => { $('#arena-mode').textContent = mode === 'demo' ? 'DEMO / OFFLINE FIXTURES' : 'Live · Nebius Token Factory'; });
   function grid() {
     const count = Number($('#arena-count').value);
     $('#arena-grid').innerHTML = Array.from({ length: count }, (_, i) => {
       const id = `V${String(i + 1).padStart(2, '0')}`, variant = variants.find(v => v.id === id), state = states.get(id) || 'waiting';
-      return `<button type="button" class="variant-tile ${esc(state)}" data-variant="${id}" aria-label="${id}: ${esc(state)}${variant ? `: ${esc(variant.headline)}` : ''}"><span class="tile-top"><b>${id}</b><span>${esc(state === 'winner' ? '★ WINNER' : state.toUpperCase())}</span></span><strong>${esc(variant?.headline || DIRECTIONS[i % 16])}</strong><p>${esc(variant?.hook || 'An idea waiting to happen.')}</p><span class="tile-bottom">${esc(variant ? `${variant.tone} / ${variant.audience}` : 'NEMOTRON NANO')}</span></button>`;
+      return `<button type="button" class="variant-tile ${esc(state)}" data-variant="${id}" aria-label="${id}: ${esc(state)}${variant ? `: ${esc(variant.headline)}` : ''}"><span class="tile-top"><b>${id}</b><span>${esc(state === 'winner' ? '★ WINNER' : state.toUpperCase())}</span></span><strong>${esc(variant?.headline || DIRECTIONS[i % 16])}</strong><p>${esc(variant?.hook || 'An idea waiting to happen.')}</p><span class="tile-bottom">${esc(variant ? `${variant.tone} / ${variant.audience}` : 'NEMOTRON LIGHTNING')}</span></button>`;
     }).join('');
     $('#arena-grid').classList.toggle('double-field', count > 16);
   }
   function metrics(result) {
     $('#arena-metrics').innerHTML = ['generate', 'verify', 'judge'].map((name, i) => {
       const stage = result?.stages.find(s => s.stage === name), steps = result?.steps.filter(s => s.stage === name) || [];
-      return `<div><span>0${i + 1} / ${['PARALLEL GENERATION', 'FACT GUARD GATE', 'SELECTIVE JUDGING'][i]}</span><strong>${stage ? `${stage.tokens.toLocaleString()} tokens` : '—'}</strong><p>${stage ? `${stage.calls} calls · ${(stage.latencyMs / 1000).toFixed(2)}s stage wall · ${money(stage.costUsd)}` : ['Nano explores the creative space', 'Super audits every variant', 'Larger model judges survivors only'][i]}</p><small>${steps.length ? [...new Set(steps.map(s => modelLabel(s.model)))].join(' / ') : ['Nano', 'Super', 'Super / Ultra'][i]}${result?.mode === 'demo' ? ' · estimated tokens / local replay time' : stage && !stage.usageComplete ? ' · usage incomplete' : ''}</small></div>`;
+      return `<div><span>0${i + 1} / ${['PARALLEL GENERATION', 'FACT GUARD GATE', 'SELECTIVE JUDGING'][i]}</span><strong>${stage ? `${stage.tokens.toLocaleString()} tokens` : '—'}</strong><p>${stage ? `${stage.calls} calls · ${(stage.latencyMs / 1000).toFixed(2)}s stage wall · ${money(stage.costUsd)}` : ['Lightning explores the creative space', 'Super audits every variant', 'Larger model judges survivors only'][i]}</p><small>${steps.length ? [...new Set(steps.map(s => esc(s.model)))].join(' / ') : ['Lightning', 'Super', 'Super'][i]}${result?.mode === 'demo' ? ' · estimated tokens / local replay time' : stage && !stage.usageComplete ? ' · usage incomplete' : ''}</small></div>`;
     }).join('') + `<div class="efficiency"><span>THE ROUTING ADVANTAGE</span><strong>${result ? money(result.totals.costUsd) : 'Small → selective'}</strong><p>${result ? `${result.totals.largeJudgeCalls} big-model duels · ${result.totals.avoidedUnsafeJudgeEntries} unsafe entries excluded` : 'Spend reasoning where it matters.'}</p><small>${result ? `${money(result.totals.allLargeCostUsd)} if generation also used the judge model*` : 'Parallel calls reduce waiting, not token spend.'}</small></div>`;
   }
   function reset() {
@@ -44,9 +43,10 @@ function init() {
   }
   async function event(data, paced = false) {
     if (data.type === 'error') throw new Error(data.error);
-    if (data.type === 'start') { mode = data.mode; $('#arena-mode').textContent = mode === 'demo' ? 'DEMO / OFFLINE FIXTURES' : 'LIVE / TOKEN FACTORY'; }
+    if (data.type === 'fallback') { reset(); $('#arena-notice').textContent = data.notice; }
+    if (data.type === 'start') { mode = data.mode; $('#arena-mode').textContent = mode === 'demo' ? 'DEMO / OFFLINE FIXTURES' : 'Live · Nebius Token Factory'; }
     if (data.type === 'stage') {
-      const labels = { generate: 'Nano is exploring creative directions', verify: 'Super is checking every assertion', judge: 'Simulated buyer personas are choosing' };
+      const labels = { generate: 'Lightning is exploring creative directions', verify: 'Super is checking every assertion', judge: 'Simulated buyer personas are choosing' };
       $('#arena-phase').textContent = `${labels[data.stage]} · ${data.state}`;
     }
     if (data.type === 'step' && data.stage === 'generate' && data.state === 'running') { states.set(data.id, 'generating'); grid(); }
@@ -66,12 +66,12 @@ function init() {
       if (paced || mode === 'live') await delay(900);
     }
     if (data.type === 'result') {
-      const result = data.result; lastResult = result; variants = result.variants;
+      const result = data.result; mode = result.mode; $('#arena-mode').textContent = mode === 'demo' ? 'DEMO / OFFLINE FIXTURES' : 'Live · Nebius Token Factory'; lastResult = result; variants = result.variants;
       if (result.winner) states.set(result.winner.id, 'winner');
       grid(); metrics(result);
       $('#arena-phase').textContent = result.winner ? `${result.winner.id} wins · evidence attached` : 'No verified variants survived. No winner selected.';
       $('#arena-survivors').textContent = result.winner ? `★ ${result.winner.id} / tournament champion` : '0 survivors';
-      $('#arena-notice').textContent = `${result.notice} *Cost comparison holds token counts constant and reprices Nano generation with the judge model; it is not a measured benchmark. Rates: public catalogue, ${result.pricing.asOf}. Unknown model prices or usage show as unavailable.`;
+      $('#arena-notice').textContent = `${result.notice} *Cost comparison holds token counts constant and reprices Lightning generation with the judge model; it is not a measured benchmark. Rates: public catalogue, ${result.pricing.asOf}. Unknown model prices or usage show as unavailable.`;
       $('#arena-winner').hidden = false;
       const lastMatch = result.rounds.at(-1)?.matches.find(m => m.winner === result.winner?.id);
       $('#arena-winner').innerHTML = result.winner ? `<div class="winner-banner"><div><span class="arena-section-label">★ / THE VERIFIED CHAMPION</span><h2>${esc(result.winner.headline)}</h2><p>${esc(lastMatch?.reason || 'The only variant to pass the evidence gate; no duel required.')}</p></div><span class="winner-id">${result.winner.id}</span></div>${detail(result.winner)}` : '<h2>No winner. The guard held.</h2><p>Every creative failed the evidence gate. Refine the facts or restrictions and try again.</p>';

@@ -21,7 +21,7 @@ Margin:  --price N  --cost N  --fee PERCENT  --shipping N  --ad-cost N
 Output:  --format md|json (default md)  --out FILE  --demo  --fact-guard  --verifier super|ultra  --help
 
 API key: OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY / NEBIUS_API_KEY, or LLM_API_KEY.
-Fact Guard: --fact-guard uses Nano -> Super (or --verifier ultra); no key = offline demo.
+Fact Guard: --fact-guard uses Lightning -> Super (or --verifier ultra); no key = offline demo.
 LLM_BASE_URL / LLM_MODEL configure a compatible alternative; Nebius is the default for Fact Guard.
 OpenAI-compatible endpoints (OpenRouter, Ollama) use --provider openai --base-url.
 Use the same currency for all amounts. Fees default to 0%; enter your own fee.
@@ -54,7 +54,7 @@ async function main() {
   let raw = {}, input, bundle;
   if (flags.demo) {
     input = flags['fact-guard'] ? FACT_GUARD_SAMPLE : SAMPLE_PRODUCT;
-    bundle = flags['fact-guard'] ? await runFactGuard(input, { demo: true, verifyModel: NEMOTRON_MODELS[flags.verifier || 'super'] }) : DEMO_BUNDLE;
+    bundle = flags['fact-guard'] ? await runFactGuard(input, { demo: true, verifyModel: process.env.NEBIUS_VERIFY_MODEL || NEMOTRON_MODELS[flags.verifier || 'super'] }) : DEMO_BUNDLE;
   }
   else {
     if (flags.file) {
@@ -85,8 +85,8 @@ async function main() {
     const options = { provider, apiKey, model: flags.model || process.env.LLM_MODEL, baseUrl: flags['base-url'] || process.env.LLM_BASE_URL };
     if (flags['fact-guard']) {
       if (!['nebius', 'openai'].includes(provider)) throw new ArgumentError('Fact Guard requires nebius or an OpenAI-compatible provider.');
-      bundle = await runFactGuard(input, { ...options, draftModel: options.model,
-        verifyModel: NEMOTRON_MODELS[flags.verifier || 'super'] });
+      bundle = await runFactGuard(input, { ...options, draftModel: flags.model || process.env.NEBIUS_DRAFT_MODEL || options.model,
+        verifyModel: process.env.NEBIUS_VERIFY_MODEL || NEMOTRON_MODELS[flags.verifier || 'super'] });
     } else bundle = await generateBundle(input, options);
   }
   const output = flags.format === 'json' ? JSON.stringify(bundle, null, 2) + '\n' : bundleToMarkdown(bundle, input);

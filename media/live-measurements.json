@@ -1,0 +1,78 @@
+[
+  {
+    "environment": "pilot",
+    "workflow": "fact-guard",
+    "measuredAt": "2026-10-16T07:10:32.802Z",
+    "baseUrl": "http://127.0.0.1:8346",
+    "mode": "live",
+    "models": [
+      "nvidia/Nemotron-3_5-Lightning",
+      "nvidia/nemotron-3-super-120b-a12b"
+    ],
+    "totals": {
+      "totalTokens": 25844,
+      "latencyMs": 75633,
+      "usageComplete": true
+    },
+    "draftLatencyMs": 4608,
+    "trustScore": 63,
+    "needsReview": true,
+    "changedFields": 29,
+    "reasoningTokens": 0
+  },
+  {
+    "environment": "pilot",
+    "workflow": "tournament",
+    "baseUrl": "direct shared pipeline on pilot",
+    "mode": "live",
+    "count": 16,
+    "concurrency": 6,
+    "totals": {
+      "totalTokens": 44057,
+      "latencyMs": 29065,
+      "usageComplete": true,
+      "costUsd": 0.0236937,
+      "allLargeCostUsd": 0.027683700000000002,
+      "estimatedSavingsUsd": 0.0039900000000000005,
+      "largeJudgeCalls": 3,
+      "avoidedUnsafeJudgeEntries": 12
+    },
+    "stages": [
+      {
+        "stage": "generate",
+        "calls": 16,
+        "latencyMs": 8677,
+        "requestMs": 47827,
+        "tokens": 10164,
+        "usageComplete": true,
+        "costUsd": 0.0012744000000000002
+      },
+      {
+        "stage": "verify",
+        "calls": 16,
+        "latencyMs": 17017,
+        "requestMs": 92236,
+        "tokens": 31701,
+        "usageComplete": true,
+        "costUsd": 0.021534300000000003
+      },
+      {
+        "stage": "judge",
+        "calls": 3,
+        "latencyMs": 3370,
+        "requestMs": 5077,
+        "tokens": 2192,
+        "usageComplete": true,
+        "costUsd": 0.0008850000000000002
+      }
+    ],
+    "models": [
+      "nvidia/Nemotron-3_5-Lightning",
+      "nvidia/nemotron-3-super-120b-a12b"
+    ],
+    "reasoningTokens": 0,
+    "winner": "V03",
+    "survivors": 4,
+    "measuredOn": "2026-10-16"
+  }
+]

@@ -2,7 +2,7 @@
 import { normalizeInput, buildMessages, parseBundle, callLLM, computeMargin, jsonObject } from './core.js';
 
 export const NEMOTRON_MODELS = Object.freeze({
-  nano: 'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B',
+  lightning: 'nvidia/Nemotron-3_5-Lightning',
   super: 'nvidia/nemotron-3-super-120b-a12b',
   ultra: 'nvidia/Nemotron-3-Ultra-550b-a55b',
 });
@@ -137,7 +137,7 @@ export async function runFactGuard(raw, options = {}) {
   const input = normalizeInput(raw), facts = sourceFacts(input);
   if (facts.length > 65) throw new Error('Fact Guard accepts up to 64 source facts. Combine related facts.');
   const mode = options.demo === true || !options.apiKey ? 'demo' : 'live';
-  const draftModel = options.draftModel || NEMOTRON_MODELS.nano;
+  const draftModel = options.draftModel || NEMOTRON_MODELS.lightning;
   const verifyModel = options.verifyModel || NEMOTRON_MODELS.super;
   const maxRounds = Math.min(2, Math.max(0, Math.trunc(options.maxRounds ?? 2)));
   const steps = [], history = [];
@@ -153,7 +153,7 @@ export async function runFactGuard(raw, options = {}) {
       result = { text: response.choices[0].message.content, model, usage: response.usage };
     } else result = await callLLM({ provider: options.provider || 'nebius', apiKey: options.apiKey,
       baseUrl: options.baseUrl, fetchImpl: options.fetchImpl, model, ...messages,
-      maxTokens: 14000, detailed: true, timeoutMs: Math.min(90000, remaining), signal: options.signal });
+      maxTokens: name === 'verify' ? 14000 : 6000, detailed: true, timeoutMs: Math.min(90000, remaining), signal: options.signal });
     const record = { step: name, round, model: result.model, latencyMs: Math.round(performance.now() - started),
       usage: result.usage, usageEstimated: mode === 'demo', state: 'complete' };
     steps.push(record); options.onProgress?.(record);

@@ -2,23 +2,26 @@
 // PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs node scripts/capture.mjs
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { FACT_GUARD_SAMPLE, NEMOTRON_MODELS } from '../src/fact-guard.js';
 import { fileURLToPath } from 'node:url';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const root = fileURLToPath(new URL('..', import.meta.url));
-const port = 8346;
-const server = spawn(process.execPath, ['scripts/serve.mjs'], { cwd: root,
-  env: { ...process.env, PORT: String(port), NEBIUS_API_KEY: '', LLM_API_KEY: '' }, stdio: 'pipe' });
+const port = Number(process.env.PORT || 8346);
+const live = process.env.CAPTURE_LIVE === '1';
+const server = process.env.CAPTURE_URL ? null : spawn(process.execPath, ['scripts/serve.mjs'], { cwd: root,
+  env: { ...process.env, PORT: String(port), NEBIUS_API_KEY: live ? process.env.NEBIUS_API_KEY : '', LLM_API_KEY: live ? process.env.LLM_API_KEY : '' }, stdio: 'pipe' });
 let browser;
 const errors = [];
 try {
-  await new Promise((resolve, reject) => {
+  if (server) await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Server startup timed out')), 10000);
     server.stdout.once('data', () => { clearTimeout(timer); resolve(); });
     server.once('error', error => { clearTimeout(timer); reject(error); });
     server.once('exit', code => { if (code) reject(new Error(`Server exited ${code}`)); });
   });
   await mkdir(new URL('../media/', import.meta.url), { recursive: true });
+  if (live) { await captureLive(); } else {
   browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH, args: ['--no-sandbox'] });
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, colorScheme: 'light',
     recordVideo: { dir: `${root}/media`, size: { width: 1920, height: 1080 } } });
@@ -64,7 +67,7 @@ try {
   await original.locator('#demo').click();
   assert.match(await original.locator('.big-headline').innerText(), /내 하루/);
   await original.locator('#provider').selectOption('nebius');
-  assert.equal(await original.locator('#model').inputValue(), 'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B');
+  assert.equal(await original.locator('#model').inputValue(), 'nvidia/Nemotron-3_5-Lightning');
   await original.locator('#fact-guard').check();
   assert.equal(await original.locator('#provider').isDisabled(), true);
   await original.locator('#fact-guard').uncheck();
@@ -130,8 +133,114 @@ try {
   console.log(JSON.stringify({ browser: 'Chromium', viewport: '1920x1080', mode: 'offline fixtures',
     checks: ['hosted POST flow', 'two caught claims', 'four routed steps', 'fact trace', 'margin', 'Markdown download', 'Korean UI', 'static sample regression', 'Nebius provider', '390px dark layout', 'streamed 16-variant tournament', 'four unsafe variants rejected', '11 persona duels', 'winner trace', '32-tile layout', 'reduced-motion mobile tournament'],
     pageErrors: errors, captures: 'media/01-11*.png', video: 'media/*.webm (not committed)' }, null, 2));
+  }
 } finally {
   await browser?.close();
-  server.kill('SIGTERM');
-  await new Promise(resolve => { if (server.exitCode !== null) resolve(); else server.once('exit', resolve); });
+  if (server) {
+    server.kill('SIGTERM');
+    await new Promise(resolve => { if (server.exitCode !== null) resolve(); else server.once('exit', resolve); });
+  }
+}
+
+
+// One real request per workflow. Never replay a fixture while recording live evidence.
+async function captureLive() {
+  const base = process.env.CAPTURE_URL || `http://127.0.0.1:${port}`;
+  const label = process.env.CAPTURE_LABEL || 'pilot';
+  assert.match(label, /^[a-z-]+$/);
+  const date = new Date().toISOString();
+  const summaries = [];
+  browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH, args: ['--no-sandbox'] });
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 },
+    recordVideo: { dir: `/tmp/nebius-live-${label}`, size: { width: 1920, height: 1080 } } });
+  const page = await context.newPage();
+  page.setDefaultTimeout(30000);
+  page.on('pageerror', error => errors.push(error.message));
+  const shot = name => page.screenshot({ path: `${root}/media/live-${label}-${name}.png` });
+  await page.goto(`${base}/?fact-guard`);
+  await page.waitForFunction(() => document.querySelector('#connection-fields').hidden);
+  const status = await (await context.request.get(`${base}/api/fact-guard`)).json();
+  assert.equal(status.mode, 'live');
+  assert.equal(status.models.draft, NEMOTRON_MODELS.lightning);
+  assert.equal(status.models.verify, NEMOTRON_MODELS.super);
+  for (const [key, value] of Object.entries(FACT_GUARD_SAMPLE)) {
+    const field = page.locator(`#product-form [name="${key}"]`);
+    if (!await field.count()) continue;
+    if (await field.evaluate(el => el.tagName === 'SELECT')) await field.selectOption(String(value));
+    else await field.fill(String(value));
+  }
+  await shot('01-fact-guard-ready');
+  const responsePromise = page.waitForResponse(r => r.url().endsWith('/api/fact-guard') && r.request().method() === 'POST', { timeout: 295000 });
+  console.log(`${label}: starting LIVE Fact Guard`);
+  await page.locator('#generate').click();
+  await shot('02-fact-guard-running');
+  const response = await responsePromise;
+  assert.equal(response.status(), 200);
+  const bundle = await response.json(), guard = bundle.factGuard;
+  assert.equal(guard.mode, 'live', guard.notice); assert.equal(guard.fallback, undefined);
+  assert.ok(guard.totals.totalTokens > 0); assert.equal(guard.totals.usageComplete, true);
+  assert.ok(guard.steps.every(s => !s.usageEstimated && s.usage.total_tokens > 0));
+  await page.locator('.guard-verdict').waitFor();
+  await page.locator('.guard-verdict').scrollIntoViewIfNeeded();
+  assert.match(await page.locator('.mode-pill').innerText(), /Live · Nebius Token Factory/);
+  await shot('03-fact-guard-result');
+  await page.locator('.pipeline-steps').scrollIntoViewIfNeeded();
+  await shot('04-fact-guard-models');
+  await page.locator('.trace-table').last().scrollIntoViewIfNeeded();
+  await shot('05-fact-guard-trace');
+  summaries.push({ environment: label, workflow: 'fact-guard', measuredAt: date, baseUrl: base, mode: guard.mode,
+    totals: guard.totals, steps: guard.steps, trustScore: guard.trustScore, needsReview: guard.needsReview,
+    changedFields: guard.changes.length });
+  await saveMeasurements(summaries);
+  console.log(JSON.stringify(summaries.at(-1)));
+  const factVideo = page.video(); await page.close();
+  await factVideo.saveAs(`${root}/media/live-${label}-fact-guard-1920x1080.webm`);
+  const arena = await context.newPage();
+  arena.on('pageerror', error => errors.push(error.message));
+  await arena.goto(`${base}/?tournament`);
+  await arena.getByText('Live · Nebius Token Factory', { exact: true }).waitFor();
+  assert.equal(await arena.locator('#arena-count').inputValue(), '16');
+  await arena.screenshot({ path: `${root}/media/live-${label}-06-tournament-ready.png` });
+  const tournamentResponsePromise = arena.waitForResponse(r => r.url().endsWith('/api/tournament') && r.request().method() === 'POST', { timeout: 295000 });
+  console.log(`${label}: starting LIVE 16-variant tournament`);
+  await arena.locator('#arena-run').click();
+  await arena.waitForFunction(() => document.querySelector('.variant-tile.drafted'), { timeout: 60000 });
+  await arena.screenshot({ path: `${root}/media/live-${label}-07-tournament-generating.png` });
+  const tournamentResponse = await tournamentResponsePromise;
+  assert.equal(tournamentResponse.status(), 200);
+  const events = (await tournamentResponse.text()).trim().split('\n').map(line => JSON.parse(line));
+  const result = events.find(e => e.type === 'result')?.result;
+  assert.ok(result, 'Tournament must emit a final result');
+  if (result.mode !== 'live') console.log(JSON.stringify({ environment: label, workflow: 'tournament', fallback: result.fallback, notice: result.notice }));
+  assert.equal(result.mode, 'live', result.notice); assert.equal(result.fallback, undefined);
+  assert.equal(result.count, 16); assert.ok(result.winner?.eligible, 'A live verified winner must exist');
+  assert.ok(result.totals.totalTokens > 0); assert.equal(result.totals.usageComplete, true);
+  assert.ok(result.steps.every(s => !s.usageEstimated && s.usage.total_tokens > 0));
+  await arena.locator('.variant-tile.winner').waitFor({ timeout: 15000 });
+  await arena.waitForFunction(() => !document.querySelector('#arena-run').disabled);
+  assert.match(await arena.locator('#arena-mode').innerText(), /Live · Nebius Token Factory/);
+  await arena.screenshot({ path: `${root}/media/live-${label}-08-tournament-bracket.png` });
+  await arena.locator('#arena-metrics').scrollIntoViewIfNeeded();
+  await arena.screenshot({ path: `${root}/media/live-${label}-09-tournament-metrics.png` });
+  await arena.locator('.winner-banner').evaluate(el => el.scrollIntoView({ block: 'start' }));
+  await arena.screenshot({ path: `${root}/media/live-${label}-10-tournament-winner.png` });
+  assert.equal(await arena.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  summaries.push({ environment: label, workflow: 'tournament', measuredAt: date, baseUrl: base, mode: result.mode,
+    count: result.count, concurrency: result.concurrency, totals: result.totals, stages: result.stages,
+    models: [...new Set(result.steps.map(s => s.model))], reasoningTokens: result.steps.reduce((n, s) => n + (s.usage.completion_tokens_details?.reasoning_tokens || 0), 0),
+    winner: result.winner.id, survivors: result.variants.filter(v => v.eligible).length });
+  console.log(JSON.stringify(summaries.at(-1)));
+  const arenaVideo = arena.video(); await arena.close();
+  await arenaVideo.saveAs(`${root}/media/live-${label}-tournament-1920x1080.webm`);
+  await context.close();
+  assert.deepEqual(errors, []);
+  await saveMeasurements(summaries);
+  console.log(JSON.stringify({ liveVerified: true, environment: label, pageErrors: errors, screenshots: '1920x1080', workflows: summaries.length }));
+}
+
+async function saveMeasurements(summaries) {
+  let measurements = [];
+  try { measurements = JSON.parse(await readFile(`${root}/media/live-measurements.json`, 'utf8')); } catch {}
+  measurements = measurements.filter(m => !summaries.some(s => s.environment === m.environment && s.workflow === m.workflow)).concat(summaries);
+  await writeFile(`${root}/media/live-measurements.json`, JSON.stringify(measurements, null, 2) + '\n');
 }

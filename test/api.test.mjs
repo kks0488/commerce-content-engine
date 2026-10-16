@@ -20,7 +20,7 @@ test('status automatically reports demo/live mode without revealing credentials'
   for (const env of [{}, { NEBIUS_API_KEY: fakeKey }, { LLM_API_KEY: fakeKey }]) {
     const result = await invoke(createHandler({ env, run: () => { throw new Error('GET must not run models.'); } }), { method: 'GET' });
     assert.equal(result.statusCode, 200); assert.equal(result.body.mode, Object.keys(env).length ? 'live' : 'demo');
-    assert.deepEqual(result.body.models, { draft: NEMOTRON_MODELS.nano, verify: NEMOTRON_MODELS.super });
+    assert.deepEqual(result.body.models, { draft: NEMOTRON_MODELS.lightning, verify: NEMOTRON_MODELS.super });
     assert.equal(result.headers['cache-control'], 'no-store'); assert.equal(result.headers['x-content-type-options'], 'nosniff');
     assert.ok(!JSON.stringify(result.body).includes(fakeKey));
   }
@@ -34,7 +34,9 @@ test('server uses environment routing and ignores all client credentials, models
   const result = await invoke(handler, { body: { ...product, apiKey: 'CLIENT_IGNORED', baseUrl: 'https://attacker.invalid/',
     provider: 'other', draftModel: 'client-model', verifyModel: 'client-model', maxRounds: 900, demo: true, unexpected: 'value' } });
   assert.equal(result.statusCode, 200); assert.deepEqual(captured.input, product);
-  assert.deepEqual(captured.options, { apiKey: fakeKey, provider: 'nebius', baseUrl: 'https://example.invalid/v1/',
+  const { onProgress, signal, ...routing } = captured.options;
+  assert.equal(typeof onProgress, 'function'); assert.ok(signal instanceof AbortSignal);
+  assert.deepEqual(routing, { apiKey: fakeKey, provider: 'nebius', baseUrl: 'https://example.invalid/v1/',
     draftModel: 'server-draft', verifyModel: 'server-verify', deadlineMs: 280000, maxRounds: 2 });
   assert.equal(result.body.factGuard.mode, 'live'); assert.ok(!JSON.stringify(result.body).includes(fakeKey));
 });
@@ -107,10 +109,13 @@ test('five requests per trusted IP are allowed, other IPs remain independent, an
 
 test('server distinguishes input validation from live upstream failure and suppresses private error data', async () => {
   const privateError = new Error(`Provider rejected ${fakeKey} and private seller facts`);
-  const upstream = await invoke(createHandler({ env: { NEBIUS_API_KEY: fakeKey }, run: async () => { throw privateError; } }));
-  assert.equal(upstream.statusCode, 502);
-  assert.match(upstream.body.error, /never fall back to demo/);
-  assert.ok(!JSON.stringify(upstream.body).includes(fakeKey)); assert.doesNotMatch(upstream.body.error, /private seller facts/);
+  const upstream = await invoke(createHandler({ env: { NEBIUS_API_KEY: fakeKey }, run: async (_input, options) => { options.onProgress({ state: 'complete', usage: { total_tokens: 123 } }); throw privateError; } }));
+  assert.equal(upstream.statusCode, 200);
+  assert.equal(upstream.body.factGuard.mode, 'demo');
+  assert.match(upstream.body.factGuard.notice, /LIVE REQUEST FAILED.*offline deterministic fixtures/);
+  assert.equal(upstream.body.factGuard.fallback.reportedTokensBeforeFailure, 123);
+  assert.ok(upstream.body.factGuard.steps.every(s => s.usageEstimated));
+  assert.ok(!JSON.stringify(upstream.body).includes(fakeKey)); assert.doesNotMatch(JSON.stringify(upstream.body), /private seller facts/);
   const validationError = Object.assign(new Error('product_info is required.'), { errors: ['product_info is required.'] });
   const validation = await invoke(createHandler({ env: {}, run: async () => { throw validationError; } }));
   assert.equal(validation.statusCode, 400); assert.equal(validation.body.error, validationError.message);

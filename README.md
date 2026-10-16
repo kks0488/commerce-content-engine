@@ -35,17 +35,17 @@ For online sellers, small brands, marketers and agencies: bring your own AI key 
 
 **[Open the tournament demo](https://commerce-content-engine-nemotron.vercel.app/?tournament)** · [Original Fact Guard](https://commerce-content-engine-nemotron.vercel.app/?fact-guard)
 
-Sellers need several creative directions, but generating and manually fact-checking each one is slow. One product now becomes **16 ad variants by default, up to 32**: Nano explores different angles, tones and audiences through a pool of four parallel requests. Each creative includes a headline, hook and exactly three contiguous beats spanning 0–3, 3–10 and 10–15 seconds, with visuals, voiceover and captions. Super independently reviews every displayed text field. Missing, contradictory, unsupported, risky or uncited factual copy is eliminated before judging. There must be at least one supported factual field to qualify.
+Sellers need several creative directions, but generating and manually fact-checking each one is slow. One product now becomes **16 ad variants by default, up to 32**: Lightning explores different angles, tones and audiences through a pool of six parallel requests. Each creative includes a headline, hook and exactly three contiguous beats spanning 0–3, 3–10 and 10–15 seconds, with visuals, voiceover and captions. Super independently reviews every displayed text field. Missing, contradictory, unsupported, risky or uncited factual copy is eliminated before judging. There must be at least one supported factual field to qualify.
 
-Verified survivors enter pairwise Super judgments (or Ultra via `NEBIUS_JUDGE_MODEL`). Practical, design-focused, skeptical and busy-mobile buyer personas rotate across duels. Odd fields advance through explicit byes; zero survivors means **no winner**. Reasons are visible throughout, and the winner retains every source quote and its full 15-second script. These personas simulate preferences; they are not customer research or conversion predictions.
+Verified survivors enter pairwise Super judgments. Practical, design-focused, skeptical and busy-mobile buyer personas rotate across duels. Odd fields advance through explicit byes; zero survivors means **no winner**. Reasons are visible throughout, and the winner retains every source quote and its full 15-second script. These personas simulate preferences; they are not customer research or conversion predictions.
 
 ```mermaid
 flowchart LR
-  P[One product + seller facts] --> N[Nano: 16 variants / 4 concurrent calls]
+  P[One product + seller facts] --> N[Lightning: 16 variants / 6 concurrent calls]
   N --> S[Super: audit all creative fields]
   P --> S
   S -->|Unsupported or risky| X[Eliminated]
-  S -->|All fields pass| B[Pairwise Super or Ultra judgments]
+  S -->|All fields pass| B[Pairwise Super judgments]
   B --> R[Rotating simulated buyer personas]
   R --> W[One winner + source trace]
   N --> M[Tokens / stage wall time / estimated USD]
@@ -55,9 +55,9 @@ flowchart LR
 
 The animated 4×4 field streams actual server progress over NDJSON, shows eliminations and bracket rounds, and supports tile inspection, replay, 32-tile fields, mobile layouts and reduced motion. On the hosted Nemotron domain it is the default landing page; the original bundle/Fact Guard interface remains at `?fact-guard`. On a static host the tournament explicitly uses offline fixtures.
 
-**Honest accounting:** every stage reports calls, token usage, stage wall time and estimated USD. Parallel calls reduce waiting, not billed tokens. Prices come from the [official public model catalogue](https://tokenfactory.nebius.com/api/public/models_info), checked with curl on 2026-10-16: Nano $0.06/$0.24, Super $0.30/$0.90, Ultra $1/$3 per million input/output tokens. The optional all-large comparison holds token counts constant and reprices only generation at the judge model's rate. It is a counterfactual cost estimate, not a measured performance benchmark. Unknown model prices or missing usage show as unavailable. Fixture tokens are estimated; fixture times measure local replay, and the animation is deliberately paced. No live inference or sponsor speed/cost benchmark has been verified.
+**Honest accounting:** every stage reports calls, token usage, stage wall time and estimated USD. Parallel calls reduce waiting, not billed tokens. Prices come from the [official public model catalogue](https://tokenfactory.nebius.com/api/public/models_info), checked with curl on 2026-10-16: Lightning $0.06/$0.24, Super $0.30/$0.90, Ultra $1/$3 per million input/output tokens. The optional all-large comparison holds token counts constant and reprices only generation at the judge model's rate. It is a counterfactual cost estimate, not a measured performance benchmark. Unknown model prices or missing usage show as unavailable. Fixture tokens are estimated; fixture times measure local replay, and the animation is deliberately paced. Live end-to-end measurements are recorded below; they are individual sample runs, not a provider-wide benchmark.
 
-**Hosted bounds:** `POST /api/tournament` accepts product fields plus integer `count` (2–32). Server configuration controls model names, credentials, endpoints, a four-request pool, two active tournaments per warm instance, five runs per trusted IP per ten minutes, 16 KB bodies, 64 source facts and a 280-second deadline. Browser disconnects cancel in-flight model calls. Limits are in-memory **per instance**, not a distributed quota: cold starts or horizontal scaling can exceed aggregate limits. No paid storage or rate-limit service was provisioned. Live upstream/schema failures stop the run and never fall back to demo fixtures.
+**Hosted bounds:** `POST /api/tournament` accepts product fields plus integer `count` (2–32). Server configuration controls model names, credentials, endpoints, a six-request pool, two active tournaments per warm instance, five runs per trusted IP per ten minutes, 16 KB bodies, 64 source facts and a 280-second deadline. Browser disconnects cancel in-flight model calls. Limits are in-memory **per instance**, not a distributed quota: cold starts or horizontal scaling can exceed aggregate limits. No paid storage or rate-limit service was provisioned. Live upstream/schema failures fall back to **explicitly labeled DEMO fixtures**, with a prominent failure notice and estimated fixture usage. The partial live field/bracket is reset, never mixed into fixture results. Reported tokens from completed live steps are retained as an incomplete lower bound; a failed request can still consume unreported tokens. Input errors and browser disconnects do not start a fixture fallback. Core/CLI callers still receive upstream errors.
 
 **Offline behavior:** the sample deliberately injects four unsafe variants into the default field; 12 survive and require 11 judged duels. Responses use the official [Chat Completion envelope and usage schema](https://docs.tokenfactory.nebius.com/api-reference/inference/create-chat-completion), read using curl. Offline templates are English, judgments are scripted, and arbitrary custom forbidden claims fail closed because template fixtures cannot verify them.
 
@@ -69,12 +69,29 @@ npm run dev
 # http://127.0.0.1:8080/?tournament
 npm run build
 # Live mode activates automatically when NEBIUS_API_KEY or LLM_API_KEY exists.
-# Optional: NEBIUS_JUDGE_MODEL=nvidia/Nemotron-3-Ultra-550b-a55b
+# Defaults: NEBIUS_DRAFT_MODEL=nvidia/Nemotron-3_5-Lightning
+# NEBIUS_VERIFY_MODEL and NEBIUS_JUDGE_MODEL=nvidia/nemotron-3-super-120b-a12b
 # PLAYWRIGHT_MODULE and PLAYWRIGHT_CHROMIUM_PATH can select installed tools on pilot.
-node scripts/capture.mjs
+node scripts/capture.mjs # offline regression capture
+# Real live capture on pilot; requires exported NEBIUS_API_KEY:
+CAPTURE_LIVE=1 CAPTURE_LABEL=pilot node scripts/capture.mjs
+# Capture deployed production (no key needed in the browser/recorder):
+CAPTURE_LIVE=1 CAPTURE_LABEL=production \
+  CAPTURE_URL=https://commerce-content-engine-nemotron.vercel.app node scripts/capture.mjs
 ```
 
 Core: [`src/tournament.js`](src/tournament.js). Hosted endpoint: [`api/tournament.js`](api/tournament.js), reusing the existing input/rate-limit handler. UI: [`tournament.js`](tournament.js), `index.html`, `styles.css`. Mocked-model/API tests: [`test/tournament.test.mjs`](test/tournament.test.mjs). Real 1920×1080 screenshots: [`media/06-tournament-ready.png`](media/06-tournament-ready.png) through [`media/10-tournament-winner-trace.png`](media/10-tournament-winner-trace.png); mobile screenshot: [`media/11-mobile-tournament.png`](media/11-mobile-tournament.png). The captured `media/tournament-1920x1080.webm` is intentionally uncommitted and also copied into the owner's `hackathons/nebius/capture/` folder for the shared video kit.
+
+### Measured live runs — October 16, 2026
+
+These are single runs on the included Everyday Steel Cup sample using authenticated Nebius completions, not fixture timings or a statistical benchmark. Fact Guard time is the sum of sequential model requests; tournament time is total pipeline wall time. Token counts include prompts and outputs reported by Nebius, including any reasoning tokens (zero reported in the successful measured runs). Unresolved claims remain visibly flagged; success means a completed live pipeline, not a guarantee of factual accuracy.
+
+| Environment | Workflow | Time | Reported tokens | Outcome |
+| --- | --- | ---: | ---: | --- |
+| Pilot / local adapter | Fact Guard | 75.633 s | 25,844 | Six calls; first Lightning draft 4.608 s; 63/100, seller review required |
+| Pilot / shared pipeline | 16-variant tournament, concurrency 6 | 29.065 s | 44,057 | 4 verified survivors, 3 Super duels, V03 winner; estimated $0.02369 |
+
+Machine-readable measurements: [`media/live-measurements.json`](media/live-measurements.json). An earlier tournament attempt visibly fell back to DEMO and is excluded from this live-success table; its token use was not retained and may still be billed. Live capture files use `media/live-*.png` and `media/live-*-1920x1080.webm`; videos stay uncommitted. Production capture uses the real public app and performs one new inference run per workflow, with no browser API keys.
 
 ## Nemotron on Nebius Token Factory
 
@@ -82,24 +99,24 @@ Core: [`src/tournament.js`](src/tournament.js). Hosted endpoint: [`api/tournamen
 
 **Solution:** Fact Guard turns a seller's facts into a complete commerce bundle, independently audits every text field, revises unsupported or risky statements, then audits the revised bundle. It keeps the draft, final copy, verification history and exact source quotes visible. The score is the percentage of reviewed factual fields with valid citations; creative text and instructions are excluded. It measures an AI assessment against seller input, not objective truth or legal compliance. A compound field must have all its assertions supported. Missing reviews, duplicate paths, mismatched copy, absent citations and invented quotes fail closed.
 
-The model IDs below were verified against the [official public catalogue](https://tokenfactory.nebius.com/api/public/models_info) on October 16, 2026:
+The model IDs below were verified with authenticated `GET /v1/models` and the [official public catalogue](https://tokenfactory.nebius.com/api/public/models_info) on October 16, 2026. Ultra costs about 3.3 times Super at the listed rates and is hidden from the web selector; no Ultra calls were made:
 
 | Role | Exact model ID | Routing rationale |
 | --- | --- | --- |
-| Draft + revise | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Smaller model handles content generation and targeted revisions |
+| Draft + revise | `nvidia/Nemotron-3_5-Lightning` | Smaller model handles content generation and targeted revisions |
 | Verify (default) | `nvidia/nemotron-3-super-120b-a12b` | Larger reasoning model checks all assertions and citations |
-| Verify (optional) | `nvidia/Nemotron-3-Ultra-550b-a55b` | Available through CLI/BYO-key verifier selector or server configuration |
+| Judge | `nvidia/nemotron-3-super-120b-a12b` | Pairwise simulated-persona selection after the evidence gate |
 
-All requests use the OpenAI-compatible `https://api.tokenfactory.nebius.com/v1/chat/completions` endpoint and bearer authentication, as documented in the [quickstart](https://docs.tokenfactory.nebius.com/quickstart). [Public endpoints route globally](https://docs.tokenfactory.nebius.com/public-serverless); no fixed region is assumed. The implementation uses JSON instructions and validates/parses responses rather than assuming that every model supports constrained JSON mode.
+All requests use the OpenAI-compatible `https://api.tokenfactory.nebius.com/v1/chat/completions` endpoint and bearer authentication, as documented in the [quickstart](https://docs.tokenfactory.nebius.com/quickstart). [Public endpoints route globally](https://docs.tokenfactory.nebius.com/public-serverless); no fixed region is assumed. Requests use `response_format: {"type":"json_object"}` per [Nebius structured-output docs](https://docs.tokenfactory.nebius.com/ai-models-inference/json), plus `chat_template_kwargs: {"enable_thinking":false}` documented by [NVIDIA for Lightning](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16#api-client) and [Super](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16#api-client). This avoids spending the completion budget on hidden reasoning with null content. Both live JSON probes reported zero reasoning tokens. Temperature is 0.2; output budgets are 6,000 for bundle drafts/revisions, 14,000 for bundle audits, 2,000 for variants/judgments and 5,000 for variant audits. Requests time out after 60 seconds (tournament) or 90 seconds (Fact Guard), within the 280-second run budget. The parser accepts JSON fences/prose and text content parts, rejects null/truncated output, validates every citation and never uses reasoning text as an answer.
 
 ```mermaid
 flowchart LR
   S[Seller facts] --> A[Browser or CLI]
   A --> H[Hosted serverless route or BYO-key client]
-  H --> N[Nemotron Nano: draft]
-  N --> V[Nemotron Super or Ultra: verify]
+  H --> N[Nemotron Lightning: draft]
+  N --> V[Nemotron Super: verify]
   S --> V
-  V -->|unsupported or risky; at most 2 revisions| R[Nemotron Nano: revise]
+  V -->|unsupported or risky; at most 2 revisions| R[Nemotron Lightning: revise]
   R --> V
   V --> T[Fact trace + trust score + before/after]
   H -. No key .-> D[Labeled offline schema-compatible fixtures]
@@ -126,14 +143,11 @@ node cli.mjs --fact-guard --name "Everyday Steel Cup" \
   --info "Capacity: 500 ml. Material: stainless steel. Hand wash recommended." \
   --lang en --format json
 
-# Optional larger verifier
-node cli.mjs --fact-guard --verifier ultra --file examples/sample-product.json
-
 npm test
 npm run build
 ```
 
-`NEBIUS_API_KEY` automatically enables live mode in the hosted endpoint and Fact Guard CLI. An invalid key or failed live call returns an error; it never silently switches to fixtures. `--demo` explicitly forces fixtures. Generic `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` support an OpenAI-compatible alternative; that alternative does not by itself satisfy the Nebius hackathon runtime requirement. `NEBIUS_DRAFT_MODEL` and `NEBIUS_VERIFY_MODEL` override hosted routing. On static GitHub Pages, select **Nebius Token Factory / Nemotron** and enable **Fact Guard** to use your own key directly. Plain single-model generation also supports the `nebius` provider.
+`NEBIUS_API_KEY` automatically enables live mode in the hosted endpoint and Fact Guard CLI. The hosted workflows display a prominent failure notice and switch to labeled offline fixtures if live inference fails; the CLI rejects failures. No fallback is labeled live. `--demo` explicitly forces fixtures. Generic `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` support an OpenAI-compatible alternative; that alternative does not by itself satisfy the Nebius hackathon runtime requirement. `NEBIUS_DRAFT_MODEL`, `NEBIUS_VERIFY_MODEL` and `NEBIUS_JUDGE_MODEL` override hosted routing. On static GitHub Pages, select **Nebius Token Factory / Nemotron** and enable **Fact Guard** to use your own key directly. Plain single-model generation also supports the `nebius` provider.
 
 ### Separate hosted project
 
@@ -148,15 +162,15 @@ Add `NEBIUS_API_KEY` through the Vercel environment-variable UI (Production), th
 
 ### What was built during the hackathon
 
-This is an extension of the existing MIT Commerce Content Engine, not a claim that the original app was created during this hackathon. The existing baseline supplied the dependency-free browser, CLI, bundle schema, margin calculation and CI. The `nebius-nemotron` branch adds the Nebius provider; Nano → Super/Ultra → Nano agent orchestration; complete field coverage and verbatim source validation; trust scoring, history, before/after and step metrics; deterministic offline API-schema fixtures; the serverless endpoint and limits; separate Vercel configuration; focused tests and real Playwright screen captures. Fact Guard v2 adds parallel variant generation, fail-closed elimination, persona brackets, streamed arena animation, per-stage cost estimates, hosted concurrency bounds, mocked tournament/API tests and 1080p screen/video captures. Main is not merged.
+This is an extension of the existing MIT Commerce Content Engine, not a claim that the original app was created during this hackathon. The existing baseline supplied the dependency-free browser, CLI, bundle schema, margin calculation and CI. The `nebius-nemotron` branch adds the Nebius provider; Lightning → Super → Lightning agent orchestration; complete field coverage and verbatim source validation; trust scoring, history, before/after and step metrics; deterministic offline API-schema fixtures; the serverless endpoint and limits; separate Vercel configuration; focused tests and real Playwright screen captures. Fact Guard v2 adds parallel variant generation, fail-closed elimination, persona brackets, streamed arena animation, per-stage cost estimates, hosted concurrency bounds, mocked tournament/API tests and 1080p screen/video captures. Main is not merged.
 
 ### Submission readiness and sponsor feedback
 
 Track: **Best Apps and Agents**. The [official rules](https://nebiusglobalaihackathon.devpost.com/rules) permit existing projects with significant in-period updates and a written explanation. Deadline: **October 30, 2026, 10:00 PDT**. Tracks are Coding and Agentic Engineering, Best Apps and Agents, Personal AI, and Physical AI. Required submission items: working Nebius/NVIDIA project, chosen track, English description, working demo URL, public repository with visible OSS license and run instructions, public YouTube video **under three minutes**, existing-project explanation, and feedback on Nebius/NVIDIA tools. The [resources](https://nebiusglobalaihackathon.devpost.com/resources) provide optional credit-registration links; this job does not register or submit anything.
 
-Owner actions remaining: supply a Nebius key and verify real Nano/Super requests, publish the final YouTube video using the captured screens, and submit the materials on Devpost. Keep judge access free and public through judging. No final video or Devpost submission is claimed here.
+Owner actions remaining: publish the final YouTube video using the live captured screens and submit the materials on Devpost. The Nebius key is configured server-side; no additional inference account or key is needed for the hosted demo. Keep judge access free and public through judging. No final video or Devpost submission is claimed here.
 
-Feedback from integration without a key: the common endpoint and Chat Completion schema allow sharing one small dependency-free adapter across CLI/browser/server; exact model IDs have different capitalization, so the public catalogue is valuable. A public per-model structured-output capability flag would make portable client setup clearer. Live model quality, throughput, latency and reliability feedback remain pending real inference; fixture performance is not sponsor-performance evidence.
+Feedback from the live integration: the common endpoint and Chat Completion schema allow sharing one small dependency-free adapter across CLI/browser/server; exact model IDs have different capitalization, so the public catalogue is valuable. A public per-model structured-output capability flag would make portable client setup clearer. Both selected models support the documented thinking-disable flag and returned JSON with reported usage in live runs. Explicit thinking configuration matters: a tiny output budget can otherwise be exhausted by reasoning. Live sample latency and tokens appear in the dated measurements below; fixture performance is not sponsor-performance evidence.
 
 ## Try it in 10 seconds
 

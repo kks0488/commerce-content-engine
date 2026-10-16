@@ -27,16 +27,51 @@ function reviewer(fields, facts, risky = false) {
 
 test('Nebius provider uses official default endpoint, exact model and detailed usage', async () => {
   assert.equal(PROVIDERS.nebius.baseUrl, 'https://api.tokenfactory.nebius.com/v1/');
-  assert.equal(PROVIDERS.nebius.model, NEMOTRON_MODELS.nano);
+  assert.equal(PROVIDERS.nebius.model, NEMOTRON_MODELS.lightning);
   let captured;
   const result = await callLLM({ provider: 'nebius', apiKey: fakeKey, system: 'System', user: 'Product', detailed: true,
-    maxTokens: 1234, fetchImpl: async (url, request) => { captured = { url, request }; return response({ ok: true }, NEMOTRON_MODELS.nano); } });
+    maxTokens: 1234, fetchImpl: async (url, request) => { captured = { url, request }; return response({ ok: true }, NEMOTRON_MODELS.lightning); } });
   assert.equal(captured.url, 'https://api.tokenfactory.nebius.com/v1/chat/completions');
   assert.equal(captured.request.headers.Authorization, `Bearer ${fakeKey}`);
   assert.equal(captured.request.redirect, 'error');
-  assert.deepEqual(JSON.parse(captured.request.body), { model: NEMOTRON_MODELS.nano,
-    messages: [{ role: 'system', content: 'System' }, { role: 'user', content: 'Product' }], max_tokens: 1234, temperature: 0.2 });
-  assert.deepEqual(result, { text: '{"ok":true}', model: NEMOTRON_MODELS.nano, usage });
+  assert.deepEqual(JSON.parse(captured.request.body), { model: NEMOTRON_MODELS.lightning,
+    messages: [{ role: 'system', content: 'System' }, { role: 'user', content: 'Product' }], max_tokens: 1234, temperature: 0.2,
+    response_format: { type: 'json_object' }, chat_template_kwargs: { enable_thinking: false } });
+  assert.deepEqual(result, { text: '{"ok":true}', model: NEMOTRON_MODELS.lightning, usage });
+});
+
+test('provider rejects reasoning-only and truncated responses, and accepts text content parts', async () => {
+  const call = choice => callLLM({ provider: 'nebius', apiKey: fakeKey,
+    fetchImpl: async () => response({}, NEMOTRON_MODELS.lightning, { choices: [choice] }) });
+  for (const field of ['reasoning', 'reasoning_content']) {
+    await assert.rejects(call({ message: { content: null, [field]: '{"ok":true}' }, finish_reason: 'stop' }), /returned no text/);
+  }
+  await assert.rejects(call({ message: { content: '{"ok":' }, finish_reason: 'length' }), /truncated/);
+  assert.equal(await call({ message: { content: [
+    { type: 'text', text: '{"ok":' }, { type: 'image_url', image_url: 'ignored' }, { type: 'text', text: 'true}' },
+  ] }, finish_reason: 'stop' }), '{"ok":\ntrue}');
+});
+
+test('provider timeout covers response reading and caller cancellation reaches fetch', async () => {
+  const waitForAbort = signal => new Promise((resolve, reject) => {
+    const abort = () => reject(Object.assign(new Error('cancelled'), { name: 'AbortError' }));
+    if (signal.aborted) abort();
+    else signal.addEventListener('abort', abort, { once: true });
+  });
+  let timeoutSignal;
+  await assert.rejects(callLLM({ provider: 'nebius', apiKey: fakeKey, timeoutMs: 5,
+    fetchImpl: async (_url, { signal }) => {
+      timeoutSignal = signal;
+      return { ok: true, text: () => waitForAbort(signal) };
+    } }), /timed out or was cancelled/);
+  assert.equal(timeoutSignal.aborted, true);
+  const controller = new AbortController();
+  let fetchSignal;
+  const pending = callLLM({ provider: 'nebius', apiKey: fakeKey, signal: controller.signal,
+    fetchImpl: (_url, { signal }) => { fetchSignal = signal; return waitForAbort(signal); } });
+  controller.abort();
+  await assert.rejects(pending, /timed out or was cancelled/);
+  assert.equal(fetchSignal.aborted, true);
 });
 
 test('live pipeline drafts, verifies, revises and verifies with efficient model routing', async () => {
@@ -49,7 +84,7 @@ test('live pipeline drafts, verifies, revises and verifies with efficient model 
       return response(content(calls.length === 1 ? 'Lifetime cure guarantee' : 'Test Cup'), body.model);
     } });
   const guard = result.factGuard;
-  assert.deepEqual(calls.map(c => c.model), [NEMOTRON_MODELS.nano, NEMOTRON_MODELS.super, NEMOTRON_MODELS.nano, NEMOTRON_MODELS.super]);
+  assert.deepEqual(calls.map(c => c.model), [NEMOTRON_MODELS.lightning, NEMOTRON_MODELS.super, NEMOTRON_MODELS.lightning, NEMOTRON_MODELS.super]);
   assert.deepEqual(guard.steps.map(s => [s.step, s.round]), [['draft', 0], ['verify', 0], ['revise', 1], ['verify', 1]]);
   const revision = JSON.parse(calls[2].messages[1].content);
   assert.equal(revision.review.length, 1);
@@ -146,7 +181,7 @@ test('offline demo is clearly labeled and Markdown preserves trace plus routing 
   const markdown = bundleToMarkdown(bundle, FACT_GUARD_SAMPLE);
   assert.match(markdown, /Mode: demo/); assert.match(markdown, /\| Claim \| Status \| Source fact \|/);
   assert.match(markdown, /F1: Capacity: 500 ml\./); assert.match(markdown, /fixture estimate; no inference/);
-  assert.ok(markdown.includes(NEMOTRON_MODELS.nano)); assert.ok(markdown.includes(NEMOTRON_MODELS.super));
+  assert.ok(markdown.includes(NEMOTRON_MODELS.lightning)); assert.ok(markdown.includes(NEMOTRON_MODELS.super));
   const escaped = structuredClone(bundle);
   escaped.factGuard.claims = [{ factual: true, claim: 'A | B\nC', status: 'supported', sources: [{ id: 'F1', quote: 'A | B\nC' }] }];
   assert.ok(bundleToMarkdown(escaped).includes('A \\| B C'));

@@ -32,7 +32,7 @@ function mockModels({ mutateDraft, mutateReview, mutateJudge, extra = {}, delay 
     try {
       if (delay) await new Promise(resolve => setTimeout(resolve, delay));
       let content;
-      if (body.model === models.draftModel || body.model === NEMOTRON_MODELS.nano) content = mutateDraft?.(draft(payload.variation), payload) ?? draft(payload.variation);
+      if (body.model === models.draftModel || body.model === NEMOTRON_MODELS.lightning) content = mutateDraft?.(draft(payload.variation), payload) ?? draft(payload.variation);
       else if (payload.fields) content = mutateReview?.(review(payload), payload) ?? review(payload);
       else content = mutateJudge?.({ winner: payload.candidates[0].id, reason: `Clearer opening for ${payload.persona.name}.` }, payload)
         ?? { winner: payload.candidates[0].id, reason: `Clearer opening for ${payload.persona.name}.` };
@@ -110,8 +110,8 @@ test('mocked live models run in parallel within the chosen bound and produce a f
   assert.ok(mock.calls.filter(call => call.model === models.judgeModel).every(call => call.payload.candidates.length === 2));
 });
 
-test('runtime concurrency clamps to eight and default remains four', async () => {
-  for (const [requested, expected] of [[undefined, 4], [99, 8], [-1, 1]]) {
+test('runtime concurrency clamps to eight and default is six', async () => {
+  for (const [requested, expected] of [[undefined, 6], [99, 8], [-1, 1]]) {
     const mock = mockModels({ delay: 1 });
     const result = await runTournament(product, { apiKey: fakeKey, ...models, count: 8, concurrency: requested, fetchImpl: mock.fetchImpl });
     assert.equal(result.concurrency, expected); assert.equal(mock.peak, expected);
@@ -167,10 +167,17 @@ test('upstream failures and malformed drafts, verifiers or judgments never use d
   }
 });
 
+test('verbose but valid judgment reasons are bounded without discarding a verified winner', async () => {
+  const mock = mockModels({ mutateJudge: value => ({ ...value, reason: 'Clearer factual hook. '.repeat(40) }) });
+  const result = await runTournament(product, { apiKey: fakeKey, ...models, count: 2, fetchImpl: mock.fetchImpl });
+  assert.equal(result.mode, 'live'); assert.ok(result.winner.eligible);
+  assert.equal(result.rounds[0].matches[0].reason.length, 600);
+});
+
 test('cost estimates use actual per-model usage and explicitly expose missing usage', async () => {
   const mock = mockModels();
   const result = await runTournament(product, { apiKey: fakeKey, count: 4, fetchImpl: mock.fetchImpl });
-  const expected = 4 * estimateCost(NEMOTRON_MODELS.nano, usage) + 7 * estimateCost(NEMOTRON_MODELS.super, usage);
+  const expected = 4 * estimateCost(NEMOTRON_MODELS.lightning, usage) + 7 * estimateCost(NEMOTRON_MODELS.super, usage);
   assert.ok(Math.abs(result.totals.costUsd - expected) < 1e-12);
   assert.ok(result.totals.allLargeCostUsd > result.totals.costUsd);
   assert.ok(result.totals.estimatedSavingsUsd > 0);
@@ -209,7 +216,7 @@ test('hosted tournament accepts count while ignoring client models, keys, endpoi
     draftModel: 'client', verifyModel: 'client', judgeModel: 'client', concurrency: 999, deadlineMs: 9999999, demo: true } });
   assert.equal(result.statusCode, 200); assert.deepEqual(captured.input, product);
   assert.equal(captured.options.apiKey, fakeKey); assert.equal(captured.options.baseUrl, 'https://example.invalid/v1/');
-  assert.equal(captured.options.count, 32); assert.equal(captured.options.concurrency, 4); assert.equal(captured.options.deadlineMs, 280000);
+  assert.equal(captured.options.count, 32); assert.equal(captured.options.concurrency, 6); assert.equal(captured.options.deadlineMs, 280000);
   for (const [key, value] of Object.entries(models)) assert.equal(captured.options[key], value);
   assert.ok(captured.options.signal instanceof AbortSignal);
   const status = await invoke(handler, { method: 'GET' });
@@ -246,7 +253,8 @@ test('hosted active bound spans IPs, releases after failures and suppresses upst
   assert.equal(busy.statusCode, 429); assert.equal(busy.headers['retry-after'], '15');
   pending[0].reject(new Error(`Private seller facts ${fakeKey}`)); pending[1].resolve({ ok: true });
   const [failed, passed] = await Promise.all([first, second]);
-  assert.equal(failed.statusCode, 502); assert.match(failed.body.error, /never fall back to demo/i);
+  assert.equal(failed.statusCode, 200); assert.match(failed.body.notice, /LIVE REQUEST FAILED/i);
+  assert.equal(failed.body.mode, 'demo'); assert.ok(failed.body.steps.every(s => s.usageEstimated));
   assert.doesNotMatch(JSON.stringify(failed.body), /Private seller facts|TEST_ONLY/); assert.equal(passed.statusCode, 200);
   const resumed = invoke(handler, { ip: '192.0.2.14' });
   assert.equal(pending.length, 3); pending[2].resolve({ ok: true }); assert.equal((await resumed).statusCode, 200);
@@ -272,6 +280,35 @@ test('NDJSON streams real tournament progress and exactly one final result', asy
   assert.equal(res.listenerCount('close'), 0);
 });
 
+test('streaming live failure restarts explicit demo fixtures and preserves reported live token lower bound', async () => {
+  const handler = tournamentApi.createHandler({ env: { NEBIUS_API_KEY: fakeKey }, run: async (_input, options) => {
+    options.onProgress({ type: 'start', mode: 'live', count: 4 });
+    options.onProgress({ type: 'step', stage: 'generate', id: 'V01', state: 'complete', usage });
+    options.onProgress({ type: 'step', stage: 'generate', id: 'V02', state: 'complete', usage });
+    options.onProgress({ type: 'step', stage: 'generate', id: 'V03', state: 'running' });
+    throw new Error(`Private upstream seller facts ${fakeKey}`);
+  } });
+  const req = Object.assign(Readable.from([]), { method: 'POST', body: { ...product, count: 4 },
+    headers: { 'content-type': 'application/json', accept: 'application/x-ndjson' }, socket: { remoteAddress: '192.0.2.32' } });
+  const chunks = [];
+  const res = Object.assign(new EventEmitter(), { setHeader() {}, flushHeaders() {}, write(chunk) { chunks.push(chunk); },
+    end() { this.writableEnded = true; } });
+  await handler(req, res);
+  const wire = chunks.join(''), events = wire.trim().split('\n').map(line => JSON.parse(line));
+  assert.doesNotMatch(wire, /Private upstream|seller facts|TEST_ONLY/);
+  assert.equal(events.filter(event => event.type === 'fallback').length, 1);
+  const fallbackIndex = events.findIndex(event => event.type === 'fallback');
+  assert.match(events[fallbackIndex].notice, /LIVE REQUEST FAILED.*DEMO/);
+  assert.equal(events.slice(fallbackIndex + 1).find(event => event.type === 'start').mode, 'demo');
+  assert.equal(events.filter(event => event.type === 'result').length, 1);
+  const result = events.at(-1).result;
+  assert.equal(result.mode, 'demo'); assert.equal(result.variants.length, 4);
+  assert.match(result.notice, /LIVE REQUEST FAILED.*DEMO/);
+  assert.deepEqual(result.fallback, { from: 'live', reportedTokensBeforeFailure: 250, usageComplete: false });
+  assert.ok(result.steps.every(step => step.usageEstimated));
+  assert.equal(res.writableEnded, true); assert.equal(res.listenerCount('close'), 0);
+});
+
 test('NDJSON failures stay private and disconnected requests cancel models', async () => {
   let ready, capturedSignal;
   const started = new Promise(resolve => { ready = resolve; });
@@ -286,6 +323,6 @@ test('NDJSON failures stay private and disconnected requests cancel models', asy
     socket: { remoteAddress: '192.0.2.31' }, body: product });
   const running = handler(req, res); await started; res.emit('close'); await running;
   assert.equal(capturedSignal.aborted, true); assert.equal(res.listenerCount('close'), 0);
-  const failure = JSON.parse(chunks[0]); assert.equal(failure.type, 'error'); assert.match(failure.error, /never fall back to demo/i);
+  const failure = JSON.parse(chunks[0]); assert.equal(failure.type, 'error'); assert.match(failure.error, /stopped before completion/i);
   assert.doesNotMatch(JSON.stringify(failure), /Private facts|TEST_ONLY/);
 });
