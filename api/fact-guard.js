@@ -83,7 +83,7 @@ export function createHandler({ env = process.env, run = runFactGuard, now = Dat
         options.onContentError = errors => contentErrors.push(...errors);
       }
       options.onProgress = event => {
-        if (event.state === 'running') attemptedCalls++;
+        if (event.state === 'running' && (!event.type || event.type === 'step')) attemptedCalls++;
         if (event.state === 'complete' && event.usage) completed.push(event);
         if (streaming && !res.destroyed) res.write(JSON.stringify(event) + '\n');
       };

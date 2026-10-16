@@ -107,7 +107,7 @@ if (mode === 'benchmark') {
           if (await field.evaluate(el => el.tagName === 'SELECT')) await field.selectOption(String(value));
           else await field.fill(value == null ? '' : String(value));
         }
-        await page.screenshot({ path: resolve('media', `quality-production-${id}-input.png`) });
+        await page.screenshot({ path: resolve('media', `quality-production-${set}-${id}-input.png`) });
         const pending = page.waitForResponse(r => r.url() === endpoint && r.request().method() === 'POST', { timeout: 295000 });
         await page.locator('#generate').click();
         const response = await pending; status = response.status(); text = await response.text(); retryAfter = response.headers()['retry-after'];
@@ -132,18 +132,18 @@ if (mode === 'benchmark') {
       await record(id, input, data, text, Math.round(performance.now() - started));
       if (page) {
         await page.locator('.guard-verdict').scrollIntoViewIfNeeded();
-        await page.screenshot({ path: resolve('media', `quality-production-${id}-guard.png`) });
+        await page.screenshot({ path: resolve('media', `quality-production-${set}-${id}-guard.png`) });
         await page.locator('.pipeline-steps').scrollIntoViewIfNeeded();
-        await page.screenshot({ path: resolve('media', `quality-production-${id}-routing.png`) });
+        await page.screenshot({ path: resolve('media', `quality-production-${set}-${id}-routing.png`) });
         if (await page.locator('.claim-diff').count()) {
           await page.locator('.claim-diff').first().scrollIntoViewIfNeeded();
-          await page.screenshot({ path: resolve('media', `quality-production-${id}-claims.png`) });
+          await page.screenshot({ path: resolve('media', `quality-production-${set}-${id}-claims.png`) });
         }
         await page.locator('.trace-table').last().scrollIntoViewIfNeeded();
-        await page.screenshot({ path: resolve('media', `quality-production-${id}-trace.png`) });
+        await page.screenshot({ path: resolve('media', `quality-production-${set}-${id}-trace.png`) });
         await page.locator('#tab-pdp').click();
         await page.locator('#panel-pdp').scrollIntoViewIfNeeded();
-        await page.screenshot({ path: resolve('media', `quality-production-${id}.png`) });
+        await page.screenshot({ path: resolve('media', `quality-production-${set}-${id}.png`) });
         console.log(`Real production UI captured: ${id}`);
         const video = page.video();
         if (video) await page.waitForTimeout(1500);

@@ -321,9 +321,44 @@
       70292,
       48999
     ],
-    "rawSamples": "~/projects/02_\uc5c5\ubb34_\uc790\ub3d9\ud654/upwork/hackathons/nebius/samples/raw/gate4-*",
+    "rawSamples": "~/projects/02_업무_자동화/upwork/hackathons/nebius/samples/raw/gate4-*",
     "rawIntegrity": "All 3 raw model texts and hosted response byte hashes verified. No manual copy changes.",
     "reason": "No complete 3x3 PASS within conservative 80-call cap. 3 accepted bundles; six more need at least 12 calls while 11 remain.",
     "writerDecision": "Lightning, Super and Qwen trial copy failed review. DeepSeek V4.1 Flash drafts; Nemotron Super audits. Ultra was not called."
+  },
+  {
+    "environment": "production",
+    "workflow": "runbook-final",
+    "measuredAt": "2026-10-16T09:37:06.698Z",
+    "gateStatus": "FAIL",
+    "acceptedBundles": 0,
+    "requiredBundles": 9,
+    "conservativeCalls": 120,
+    "callBudget": 120,
+    "priorCalls": 69,
+    "productionDeployment": "dpl_yY5F9LMVoXJLnRNzXcegNcwZ8JCy",
+    "productionModels": {
+      "draft": "nvidia/nemotron-3-super-120b-a12b",
+      "verify": "nvidia/nemotron-3-super-120b-a12b",
+      "judge": "nvidia/nemotron-3-super-120b-a12b"
+    },
+    "rawSamples": "~/projects/02_업무_자동화/upwork/hackathons/nebius/samples/raw/gate9-*",
+    "rawIntegrity": "Two completed live bundle raw/response hashes verified; both failed strict review. Failed board raw attempts preserved separately.",
+    "finalTournament": {
+      "liveCalls": 2,
+      "reportedLiveTokens": 4894,
+      "completed": false,
+      "fallback": "explicit DEMO; excluded from live video"
+    },
+    "tests": {
+      "passed": 92,
+      "failed": 0
+    },
+    "video": "nebius_demo_final.mp4 (2:30 candidate; acceptance remains FAIL)",
+    "openIssues": [
+      "Unprovided care and product details; native copy and hooks below rubric",
+      "Malformed or insufficient model citations and unsupported implications",
+      "No consecutive 3x3 acceptance; final tournament stopped at cap"
+    ]
   }
 ]

@@ -303,6 +303,7 @@ test('streamed product validation returns an error event without a fixture fallb
 test('streaming live failure restarts explicit demo fixtures and preserves reported live token lower bound', async () => {
   const handler = tournamentApi.createHandler({ env: { NEBIUS_API_KEY: fakeKey }, run: async (_input, options) => {
     options.onProgress({ type: 'start', mode: 'live', count: 4 });
+    options.onProgress({ type: 'stage', stage: 'generate', state: 'running' });
     options.onProgress({ type: 'step', stage: 'generate', id: 'V01', state: 'complete', usage });
     options.onProgress({ type: 'step', stage: 'generate', id: 'V02', state: 'complete', usage });
     options.onProgress({ type: 'step', stage: 'generate', id: 'V03', state: 'running' });
@@ -415,7 +416,7 @@ test('publication guard rejects model-approved invented mechanisms, tactile clai
     'Show the lid clicking off.', 'Unscrew the lid for a refill.', 'Slide the lid open.',
     'A button releases the lid.', 'Feel the smooth steel body.', 'Wide mouth fits all.',
     'All-day hydration starts here.', 'The lid fits perfectly.', 'Quick clean, back to your desk.',
-    'Open the gift box.', 'Durable stainless steel build.',
+    'Open the gift box.', 'Durable stainless steel build.', 'Your coffee’s new best friend.', 'Easy to hold.',
   ];
   const input = { ...product, product_info: product.product_info + '\nRemovable lid.\nWide opening.\nFinish: matte cream.\nUnknowns: click, screw, slide and button mechanism; smooth texture; gift box.' };
   for (const invented of observedFailures) {
@@ -434,7 +435,7 @@ test('publication guard rejects model-approved invented mechanisms, tactile clai
 test('publication guard allows ordinary filling, plain removal, visual matte finish and sourced mechanisms', () => {
   const row = claim => ({ path: 'beats.0.visual', claim, factual: false, status: 'supported', sources: [], reason: 'Creative staging.' });
   const facts = [{ id: 'F1', text: 'Removable lid.' }, { id: 'F2', text: 'Finish: matte cream.' }, { id: 'F3', text: 'Wide opening.' }];
-  for (const claim of ['Remove the lid and fill the cup.', 'Show the matte cream finish.', 'Fill the wide opening with water.', 'A smooth camera pan across the cup.', 'Click to shop the cup.', 'Remove the lid. Click to shop.', 'Easy clean']) {
+  for (const claim of ['Remove the lid and fill the cup.', 'Show the matte cream finish.', 'Fill the wide opening with water.', 'A smooth camera pan across the cup.', 'Click to shop the cup.', 'Remove the lid. Click to shop.', 'Easy clean', 'The wide opening allows smooth flow, matte cream surface softly lit.']) {
     assert.equal(guardTournamentClaims([row(claim)], facts)[0].status, 'supported', claim);
   }
   const supported = [

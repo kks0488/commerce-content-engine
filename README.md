@@ -1,5 +1,5 @@
 # Commerce Content Engine
-Turn verified product facts into a complete, editable commerce copy bundle.
+Turn seller-provided facts into a complete, editable commerce copy bundle.
 
 - Write a product page with FAQ, ad copy, hashtags, a shorts script and thumbnail text.
 - Check claims against your facts with Fact Guard, or compare short ads in a tournament.

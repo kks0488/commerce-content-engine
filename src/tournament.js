@@ -46,16 +46,21 @@ export function guardTournamentClaims(claims, facts, language = 'English') {
   const lid = '(?:\\b(?:lid|cap|top|closure)\\b|뚜껑|마개)';
   const nearLid = mechanism => new RegExp(`(?:${lid}.{0,45}${mechanism}|${mechanism}.{0,45}${lid})`, 'i');
   const rules = [
+    { name: 'holding ease or ergonomic fit', pattern: /easy to hold|fits? comfortably in (?:the |your )?hand|comfortable (?:grip|hold)|ergonomic|손에\s*(?:잘\s*맞|편안)/i, evidence: /easy to hold|fits? comfortably in (?:the |your )?hand|comfortable (?:grip|hold)|ergonomic|손에\s*(?:잘\s*맞|편안)/i },
     { name: 'durability', pattern: /\bdurab\w*|\bbuilt to last\b|\blong[- ]lasting\b|내구|튼튼/i, evidence: /\bdurab\w*|\bbuilt to last\b|\blong[- ]lasting\b|내구|튼튼/i },
     { name: 'click or snap lid mechanism', pattern: nearLid('(?:click(?:s|ed|ing)?|snap(?:s|ped|ping)?|딸깍|찰칵)'), evidence: /\b(?:click|snap)(?:s|ed|ing|ped|ping)?\b|딸깍|찰칵/i },
     { name: 'screw or twist lid mechanism', pattern: nearLid('(?:unscrew(?:s|ed|ing)?|screw(?:s|ed|ing)?|twist(?:s|ed|ing)?|돌려|나사)'), evidence: /\b(?:screw|unscrew|twist)(?:s|ed|ing)?\b|나사|돌려/i },
     { name: 'sliding lid mechanism', pattern: nearLid('(?:slid(?:e|es|ing)?|밀어|슬라이드)'), evidence: /\bslid(?:e|es|ing)\b|슬라이드|밀어/i },
     { name: 'button mechanism', pattern: new RegExp(nearLid('(?:button|버튼)').source + '|' + /\b(?:push[- ]?button|button[- ](?:release|lid)|(?:press|push|tap).{0,20}button)\b|버튼.{0,20}(?:누르|눌러|열)/i.source, 'i'), evidence: /\bbutton\b|버튼/i },
-    { name: 'tactile smoothness', pattern: /\b(?:smooth|silky|soft)[- ](?:touch|feel|texture|surface|finish|body|sides?|steel|cup)|\bsmooth.{0,25}(?:texture|surface|finish|body|sides?)\b|\b(?:feel|touch).{0,25}smooth\b|매끄러운|부드러운\s*(?:촉감|표면)/i, evidence: /\bsmooth\b|매끄러|부드러운\s*(?:촉감|표면)/i },
+    { name: 'tactile smoothness', pattern: /\b(?:smooth|silky|soft)[- ](?:touch|feel|texture|surface|finish|body|sides?|steel|cup)|\bsmooth(?: matte| cream| stainless(?: steel)?| steel)? (?:texture|surface|finish|body|sides?)\b|\b(?:feel|touch).{0,25}smooth\b|매끄러운|부드러운\s*(?:촉감|표면)/i, evidence: /\bsmooth\b|매끄러|부드러운\s*(?:촉감|표면)/i },
     { name: 'supplied packaging', pattern: /\b(?:gift box|packaging|(?:open|unwrap|unpack).{0,30}(?:the |a )?box|box.{0,15}(?:opens|opening))\b|선물\s*상자|포장\s*상자|패키지/i, evidence: /\b(?:box|packaging|packaged)\b|상자|포장|패키지/i },
   ];
   return claims.map(row => {
     let reason = '', status = 'unsupported';
+    if (/\b(?:best|perfect(?:ly)?|guarantee\w*|no\.?\s*1|number\s*one)\b|최고|완벽|100\s*%/i.test(row.claim)) {
+      reason = 'Banned absolute or superlative wording is not publishable, including casual best-friend phrasing.';
+      status = 'risky';
+    }
     if ((row.claim.match(/\d+(?:\.\d+)?/g) || []).some(number => !suppliedNumbers.has(number))) {
       reason = 'Unprovided number in ad copy or visual direction; countdowns and time-to-ready claims also require evidence.';
     }
@@ -71,7 +76,7 @@ export function guardTournamentClaims(claims, facts, language = 'English') {
     for (const rule of rules) if (rule.pattern.test(physicalCopy) && !sources.some(source => rule.evidence.test(source))) {
       reason ||= `Unprovided ${rule.name}; affirmative seller evidence is required, including for visual stage directions.`;
     }
-    return reason ? { ...row, factual: true, status: row.status === 'risky' ? 'risky' : status, sources: [], reason: `Publication guard: ${reason}` } : row;
+    return reason ? { ...row, factual: true, status: row.status === 'risky' ? 'risky' : status, sources: [], reason: `${row.status !== 'supported' ? row.reason + ' ' : ''}Publication guard: ${reason}` } : row;
   });
 }
 export function parseVariant(text, id, direction) {
