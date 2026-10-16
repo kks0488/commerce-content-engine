@@ -34,8 +34,9 @@ test('server uses environment routing and ignores all client credentials, models
   const result = await invoke(handler, { body: { ...product, apiKey: 'CLIENT_IGNORED', baseUrl: 'https://attacker.invalid/',
     provider: 'other', draftModel: 'client-model', verifyModel: 'client-model', maxRounds: 900, demo: true, unexpected: 'value' } });
   assert.equal(result.statusCode, 200); assert.deepEqual(captured.input, product);
-  const { onProgress, signal, ...routing } = captured.options;
+  const { onProgress, onRawOutput, onContentError, signal, ...routing } = captured.options;
   assert.equal(typeof onProgress, 'function'); assert.ok(signal instanceof AbortSignal);
+  assert.equal(typeof onRawOutput, 'function'); assert.equal(typeof onContentError, 'function');
   assert.deepEqual(routing, { apiKey: fakeKey, provider: 'nebius', baseUrl: 'https://example.invalid/v1/',
     draftModel: 'server-draft', verifyModel: 'server-verify', deadlineMs: 280000, maxRounds: 1, maxCalls: 6 });
   assert.equal(result.body.factGuard.mode, 'live'); assert.ok(!JSON.stringify(result.body).includes(fakeKey));
@@ -139,4 +140,21 @@ test('public copy requests can lower but cannot raise the model-call ceiling', a
   assert.equal(captured.maxCalls, 2);
   request.headers['x-cce-max-calls'] = '7';
   assert.equal((await invoke(handler, request)).statusCode, 400);
+});
+
+test('failed live copy preserves exact model attempts and bounded validation diagnostics', async () => {
+  const raw = '{"pdp":{"headline":"Rejected raw copy"}}';
+  const handler = createHandler({ env: { NEBIUS_API_KEY: fakeKey }, run: async (_input, options) => {
+    options.onProgress({ state: 'running', model: 'writer' });
+    options.onRawOutput({ step: 'draft', round: 0, model: 'writer', text: raw });
+    options.onContentError(['Invalid headline length at pdp.headline']);
+    throw new Error('Invalid copy');
+  } });
+  const result = await invoke(handler);
+  assert.equal(result.body.factGuard.mode, 'demo');
+  assert.equal(result.body.factGuard.fallback.attemptedCalls, 1);
+  assert.equal(result.body.factGuard.fallback.rawAttempts[0].text, raw);
+  assert.equal(result.body.factGuard.fallback.rawAttempts.length, 1, 'offline fallback must never enter the live raw evidence');
+  assert.equal(result.body.factGuard.fallback.failureKind, 'copy_validation');
+  assert.ok(!JSON.stringify(result.body).includes(fakeKey));
 });

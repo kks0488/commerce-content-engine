@@ -92,12 +92,14 @@ Supported factual fields MUST have verbatim citations supporting every assertion
 Unsupported = absent/contradicted evidence; risky = medical, legal, absolute, certification or forbidden claim.
 Pure creative framing, questions, stage directions and seller instructions with NO factual assertions may set
 factual:false, status:supported, sources:[], and explain why. Never use factual:false to hide a product spec or performance claim.
+In particular, a styling hashtag such as #주방꾸미기 or #DeskStyle, a shopping CTA, or a subjective mood is factual:false when it asserts no specification. Do not mark it factual:true and then omit citations. A hashtag naming a material or capacity DOES assert that supplied fact and needs its citation. Keep the factual flag, status, sources and explanation consistent.
 Ordinary use scenarios and subjective styling/mood are creative framing, not new performance claims:
 30x20 cm -> preparing ingredients for a meal; rounded corners -> rounded lines that do not catch the hand;
 a color -> a visual mood; removable lid -> remove to wash. These are allowed without a literal benefit sentence
 in the source. Cite the underlying fact when a field mixes fact with such framing. Do NOT flag ordinary
 food/drink/outfit scenes, invitations to view/add to cart, or subjective visual style as unsupported.
 Material alone NEVER establishes hygiene, durability, softness, breathability, comfort, thermal retention or safety.
+Visual directions are NOT exempt from grounding: a removable lid does not establish a screw, slide, click, snap, release button or drinking aperture. Merely show lifting/removing it without specifying a mechanism. Matte is a visual finish, not evidence of smooth tactile texture. Do not infer hand fit, universal fit, all-day use, quick cleaning, spill prevention or supplied packaging. Reject those assertions unless their exact property is positively stated in source facts; mentioning an unknown is not positive evidence. Ordinary props such as a laptop or fruit are allowed scene setting, but branded/included product accessories and shipping boxes require source evidence.
 Unknown-attribute caveats must appear ONLY in listingCheck; flag them elsewhere, including FAQ and narration.
 Listing checks are seller instructions to obtain evidence, not assertions that the product has that property.
 Also review publication quality without suppressing ordinary benefit framing. Mark a field unsupported with an editorial reason if it is clearly lifeless spec repetition, unnatural or mixed-language writing, an awkward CTA, an unanswerable FAQ, or a weak generic hook. Headlines must sell a moment or reason to care, not just restate product name/material/dimensions. Ad headlines should cover distinct angles. Korean friendly copy must consistently use 해요체 and natural particles; English must be idiomatic. Listing checks must not describe supplied facts as missing. These are editorial failures, not evidence of a new product fact.
@@ -165,16 +167,18 @@ export async function runFactGuard(raw, options = {}) {
   const deadline = Date.now() + (options.deadlineMs || 280000);
   async function step(name, round, model, messages, fixture) {
     const started = performance.now();
-    options.onProgress?.({ step: name, round, model, state: 'running' });
     const remaining = deadline - Date.now();
     if (remaining <= 0) throw new Error('Fact Guard reached its total time limit. Try fewer facts.');
+    if (mode === 'live') {
+      if (callsStarted >= (options.maxCalls ?? Infinity)) throw new Error('Live model call budget exhausted before the next step.');
+      callsStarted++;
+    }
+    options.onProgress?.({ step: name, round, model, state: 'running' });
     let result;
     if (mode === 'demo') {
       const response = fixtureCompletion(fixture(), model, messages);
       result = { text: response.choices[0].message.content, model, usage: response.usage };
     } else {
-      if (callsStarted >= (options.maxCalls ?? Infinity)) throw new Error('Live model call budget exhausted before the next step.');
-      callsStarted++;
       result = await callLLM({ provider: options.provider || 'nebius', apiKey: options.apiKey,
       baseUrl: options.baseUrl, fetchImpl: options.fetchImpl, model, ...messages,
       temperature: name === 'verify' ? 0.2 : 0.35,
@@ -183,6 +187,7 @@ export async function runFactGuard(raw, options = {}) {
     }
     const record = { step: name, round, model: result.model, latencyMs: Math.round(performance.now() - started),
       usage: result.usage, usageEstimated: mode === 'demo', state: 'complete' };
+    if (mode === 'live') options.onRawOutput?.({ step: name, round, model: result.model, text: result.text });
     steps.push(record); options.onProgress?.(record);
     return result.text;
   }
@@ -197,7 +202,9 @@ export async function runFactGuard(raw, options = {}) {
       previousText = text; return text;
     },
       text => {
-        const parsed = mode === 'live' ? validateCopy(parseBundle(text), input) : parseBundle(text);
+        let parsed;
+        try { parsed = mode === 'live' ? validateCopy(parseBundle(text), input) : parseBundle(text); }
+        catch (error) { options.onContentError?.(error.message.split('\n').map(line => line.split(': "')[0])); throw error; }
         rawOutput = { text, model: steps.at(-1).model };
         return parsed;
       }, options);

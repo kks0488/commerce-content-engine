@@ -122,7 +122,8 @@ test('provider errors include HTTP status and message without leaking raw or enc
   await assert.rejects(() => callLLM({}), /API key is required/);
 });
 test('generateBundle overwrites model margin with deterministic computation', async () => {
-  const bundle = await generateBundle(SAMPLE_PRODUCT, { apiKey: 'mock', fetchImpl: async () => response({ choices: [{ message: { content: JSON.stringify({ ...DEMO_BUNDLE, margin: { unitProfit: 999 } }) } }] }) });
+  const copy = { ...DEMO_BUNDLE, ads: { ...DEMO_BUNDLE.ads, bodies: DEMO_BUNDLE.ads.bodies.map(body => body + ' 사진을 보고 장바구니에 담아 보세요.') }, margin: { unitProfit: 999 } };
+  const bundle = await generateBundle(SAMPLE_PRODUCT, { apiKey: 'mock', fetchImpl: async () => response({ choices: [{ message: { content: JSON.stringify(copy) } }] }) });
   assert.equal(bundle.margin.unitProfit, 10000); assert.equal(bundle.sample, undefined);
 });
 test('Markdown export includes all sections, details, warnings and sample identity', () => {
@@ -200,7 +201,7 @@ test('recorded real Nemotron response is rejected then repaired once without pla
     if (calls === 1) return response(recorded);
     assert.match(body.messages[0].content, /Previous response failed:/);
     assert.equal(body.model, 'nvidia/nemotron-3-super-120b-a12b');
-    return response({ choices: [{ message: { content: JSON.stringify(DEMO_BUNDLE) } }] });
+    return response({ choices: [{ message: { content: JSON.stringify({ ...DEMO_BUNDLE, ads: { ...DEMO_BUNDLE.ads, bodies: DEMO_BUNDLE.ads.bodies.map(body => body + ' 사진을 보고 장바구니에 담아 보세요.') } }) } }] });
   } });
   assert.equal(calls, 2); assert.equal(bundle.ads.headlines.length, 3);
   assert.doesNotMatch(JSON.stringify(bundle), /needs info/);
@@ -253,7 +254,7 @@ test('publication rubric rejects customer caveats, absolutes, oversized headline
   }
   assert.throws(() => validateCopy({ pdp: { subheadline: '[needs info] color' } }, input), /placeholder/);
   assert.throws(() => validateCopy({ ads: { bodies: [''] } }, input), /empty/);
-  const b = { ads: { bodies: ['Pour your morning tea into a steel cup.'] }, listingCheck: [{ issue: 'Heat retention is unknown.', fix: 'Obtain test evidence.' }] };
+  const b = { ads: { bodies: ['Pour your morning tea into a steel cup. View the product photos.'] }, listingCheck: [{ issue: 'Heat retention is unknown.', fix: 'Obtain test evidence.' }] };
   const before = JSON.stringify(b); validateCopy(b, input); assert.equal(JSON.stringify(b), before);
   assert.doesNotThrow(() => validateCopy({ pdp: { subheadline: '100% linen for your next outfit.' } }, { ...input, product_info: '100% linen.' }));
 });
@@ -263,7 +264,7 @@ test('rubric distinguishes unknown source mentions from evidence and allows ordi
   for (const claim of ['항균 효과가 있어요.', '가볍게 들 수 있어요.', '칼질해도 미끄러지지 않아요.', '손을 다치지 않게 잡아줘요.']) {
     assert.throws(() => validateCopy({ ads: { bodies: [claim] } }, input), /unsupported benefit/);
   }
-  const copy = { ads: { bodies: ['한 끼 재료를 손질하기 넉넉한 크기예요.', '손에 걸리지 않는 둥근 모서리를 짚어 보세요.'] } };
+  const copy = { ads: { bodies: ['한 끼 재료를 손질하기 넉넉한 크기예요. 크기 사진을 봐 주세요.', '손에 걸리지 않는 둥근 모서리예요. 사진을 보고 장바구니에 담아 보세요.'] } };
   assert.equal(validateCopy(copy, input), copy);
   assert.throws(() => validateCopy({ pdp: { subheadline: '100% linen.' } }, { ...input, language: 'English', product_info: 'Material: linen.' }), /banned claim/);
 });
@@ -292,4 +293,34 @@ test('editorial gate rejects observed demonstration notes and obvious location h
 
 test('wide opening does not establish hand clearance', () => {
   assert.throws(() => validateCopy({ pdp: { bullets: ['넓은 입구라 얼음을 넣을 때 손이 걸리지 않아요'] } }, SAMPLE_PRODUCT), /hand-clearance/);
+});
+
+test('observed safe-but-unpublishable ads and repetitive narration are rejected without edits', () => {
+  const careAd = { ads: { bodies: ['한 끼 재료를 올려 손질해 보세요. 손세척 후 세워서 건조해 주세요.', '사진을 보고 장바구니에 담아 보세요.'] } };
+  const raw = JSON.stringify(careAd);
+  assert.throws(() => validateCopy(careAd, SAMPLE_PRODUCT), /missing purchase CTA at ads.bodies.0/);
+  assert.equal(JSON.stringify(careAd), raw);
+  assert.throws(() => validateCopy({ shorts: { scenes: [{ voiceover: '모서리가 둥글어서 손에 걸리지 않는 둥근 모서리예요.' }] } }, SAMPLE_PRODUCT), /repetitive copy/);
+  assert.throws(() => validateCopy({ shorts: { hook: '채소 손질이 좀 번거롭나요?' } }, SAMPLE_PRODUCT), /weak hook/);
+  assert.doesNotThrow(() => validateCopy({ ads: { bodies: ['내추럴 색감으로 저녁 준비에 분위기를 더해요. 사진을 보고 장바구니에 담아 보세요.'] }, shorts: { hook: '배달 말고, 오늘은 집밥!' } }, SAMPLE_PRODUCT));
+  assert.throws(() => validateCopy({ ads: { bodies: ['Hand wash after your morning tea.'] } }, { ...SAMPLE_PRODUCT, language: 'English' }), /missing purchase CTA/);
+  assert.doesNotThrow(() => validateCopy({ ads: { bodies: ['Make room for your morning tea. View the product photos and add to cart.'] } }, { ...SAMPLE_PRODUCT, language: 'English' }));
+});
+
+test('ordinary filling and washing do not establish foam prevention or cleaning speed', () => {
+  const input = normalizeInput({ product_name: '텀블러', product_info: '형태: 넓은 입구, 분리형 뚜껑.\n관리: 손세척 권장.', language: 'Korean' });
+  for (const claim of ['넓은 입구로 거품 없이 부드럽게 부어요.', '뚜껑을 분리해 안쪽을 빠르게 헹궈요.']) {
+    assert.throws(() => validateCopy({ pdp: { description: [claim] } }, input), /unsupported benefit/);
+  }
+  const ordinary = { pdp: { description: ['넓은 입구로 음료를 따르고, 마신 뒤에는 뚜껑을 분리해 손세척해 주세요.'] } };
+  assert.equal(validateCopy(ordinary, input), ordinary);
+  assert.doesNotThrow(() => validateCopy({ pdp: { description: ['뚜껑을 분리해 빠르게 헹궈요.'] } }, { ...input, product_info: input.product_info + '\n시험 결과: 빠르게 헹굴 수 있음.' }));
+});
+
+test('gentle rinsing is not an unsupported product-weight assertion', () => {
+  const input = normalizeInput({ product_name: '도마', product_info: '관리: 손세척 후 세워서 건조.', language: 'Korean' });
+  assert.doesNotThrow(() => validateCopy({ pdp: { description: ['물에 가볍게 헹군 뒤 세워서 건조해 주세요.'] } }, input));
+  for (const claim of ['가벼운 도마예요.', '가볍게 들고 옮겨요.', '도마가 가벼워요.']) {
+    assert.throws(() => validateCopy({ pdp: { description: [claim] } }, input), /unsupported benefit/);
+  }
 });

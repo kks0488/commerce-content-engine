@@ -13,7 +13,7 @@ function content(headline = 'Test Cup') {
   return {
     pdp: { headline, subheadline: 'Capacity: 500 ml.', bullets: Array(5).fill('Material: steel.'), description: Array(3).fill('Capacity: 500 ml.'),
       faq: Array.from({ length: 3 }, () => ({ question: 'What is the material?', answer: 'Material: steel.' })) },
-    ads: { headlines: Array(3).fill('Test Cup'), bodies: Array(2).fill('Material: steel.'), keywords: ['#Cup', '#Steel', '#500ml'] },
+    ads: { headlines: Array(3).fill('Test Cup'), bodies: Array(2).fill('Material: steel. View the product photos and add to cart.'), keywords: ['#Cup', '#Steel', '#500ml'] },
     shorts: { hook: 'Test Cup', scenes: ['0-3s', '3-12s', '12-23s', '23-35s'].map(time => ({ time, visual: 'Show the cup.', voiceover: 'Material: steel.', caption: 'Test Cup' })), cta: 'Test Cup' },
     thumbnails: Array.from({ length: 3 }, () => ({ text: 'Test Cup', angle: 'Show the cup.' })),
     listingCheck: ['high', 'medium', 'low'].map(priority => ({ priority, issue: 'Confirm listing details.', fix: 'Review the supplied facts.' })),

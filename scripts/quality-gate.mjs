@@ -21,7 +21,7 @@ const manifestFile = resolve(output, `${set}-manifest.json`);
 await mkdir(output, { recursive: true });
 let manifest;
 try { manifest = JSON.parse(await readFile(manifestFile, 'utf8')); }
-catch { manifest = { set, mode, products, calls: Number(process.env.QA_PRIOR_CALLS || 0), budget: 80, runs: [] }; }
+catch { manifest = { set, mode, products, calls: Number(process.env.QA_PRIOR_CALLS || 0), budget: Number(process.env.QA_BUDGET || 120), runs: [] }; }
 const save = () => writeFile(manifestFile, JSON.stringify(manifest, null, 2) + '\n');
 const hash = text => createHash('sha256').update(text).digest('hex');
 function rawMarkdown(b, input, header) {
@@ -45,21 +45,21 @@ async function record(id, input, response, responseText, latencyMs) {
   if (models.some(m => /ultra/i.test(m))) throw new Error('Ultra is prohibited for this gate.');
   const raw = guard.rawOutput?.text;
   if (!raw) throw new Error('Hosted response does not preserve raw model text.');
-  const parsed = validateCopy(parseBundle(raw), normalizeInput(input));
-  for (const key of ['pdp', 'ads', 'shorts', 'thumbnails', 'listingCheck']) {
-    if (JSON.stringify(parsed[key]) !== JSON.stringify(response[key])) throw new Error(`Copy changed after inference: ${key}`);
-  }
   const stem = resolve(output, `${set}-${id}`);
   await writeFile(stem + '.json', raw);
   await writeFile(stem + '.response.json', responseText);
   await writeFile(stem + '.md', rawMarkdown(JSON.parse(raw), input, `RAW model output, unedited, ${timestamp}, model ids: ${models.join(', ')}`));
+  if (models.some(m => !Object.values(NEMOTRON_MODELS).slice(0, 2).includes(m))) throw new Error('This gate requires Nemotron Lightning/Super only.');
+  const parsed = validateCopy(parseBundle(raw), normalizeInput(input));
+  for (const key of ['pdp', 'ads', 'shorts', 'thumbnails', 'listingCheck']) {
+    if (JSON.stringify(parsed[key]) !== JSON.stringify(response[key])) throw new Error(`Copy changed after inference: ${key}`);
+  }
   const entry = { id, input, timestamp, models, rawModel: guard.rawOutput.model, rawSha256: hash(raw), responseSha256: hash(responseText),
     liveCalls: guard.steps.length, latencyMs, costUsd: guard.steps.reduce((n, s) => n + (estimateCost(s.model, s.usage) || 0), 0),
     trustScore: guard.trustScore, needsReview: guard.needsReview, steps: guard.steps, automatedRubric: 'PASS', editorialReview: 'PENDING' };
   manifest.runs.push(entry); await save();
   console.log(JSON.stringify({ ...entry, steps: undefined }));
   console.log(JSON.stringify({ headline: parsed.pdp.headline, ads: parsed.ads, hook: parsed.shorts.hook, flagged: guard.claims.filter(c => c.status !== 'supported') }));
-  if (guard.needsReview) throw new Error('Factual audit has unresolved claims; gate failed.');
 }
 if (mode === 'benchmark') {
   if (!process.env.NEBIUS_API_KEY) throw new Error('NEBIUS_API_KEY is required.');
@@ -87,17 +87,18 @@ if (mode === 'benchmark') {
       const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
       browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH, args: ['--no-sandbox'] });
     }
-    for (const input of products) {
+    for (const input of products.filter(product => !process.env.QA_PRODUCT || product.id === process.env.QA_PRODUCT)) {
       const id = `round${round}-${input.id}`;
       if (manifest.runs.some(run => run.id === id)) { console.log(`Already captured: ${id}`); continue; }
       // Reserve the maximum up front; a network failure cannot silently lose budget accounting.
       if (manifest.calls + 2 > manifest.budget) throw new Error('Insufficient live-call budget for another hosted request.');
-      const reservedCalls = Math.min(6, manifest.budget - manifest.calls);
+      const reservedCalls = Math.min(Number(process.env.QA_MAX_CALLS || 6), manifest.budget - manifest.calls);
       manifest.calls += reservedCalls; manifest.pendingRequest = { id, started: new Date().toISOString() }; await save();
       const started = performance.now();
       let status, text, retryAfter, page;
       if (browser) {
-        page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, extraHTTPHeaders: { 'x-cce-max-calls': String(reservedCalls) } });
+        page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, extraHTTPHeaders: { 'x-cce-max-calls': String(reservedCalls) },
+          ...(process.env.QA_VIDEO === '1' ? { recordVideo: { dir: '/tmp/nebius-gate-video', size: { width: 1920, height: 1080 } } } : {}) });
         await page.goto(new URL('/?fact-guard', endpoint).href);
         await page.waitForFunction(() => document.querySelector('#connection-fields').hidden);
         for (const [key, value] of Object.entries(normalizeInput(input))) {
@@ -106,6 +107,7 @@ if (mode === 'benchmark') {
           if (await field.evaluate(el => el.tagName === 'SELECT')) await field.selectOption(String(value));
           else await field.fill(value == null ? '' : String(value));
         }
+        await page.screenshot({ path: resolve('media', `quality-production-${id}-input.png`) });
         const pending = page.waitForResponse(r => r.url() === endpoint && r.request().method() === 'POST', { timeout: 295000 });
         await page.locator('#generate').click();
         const response = await pending; status = response.status(); text = await response.text(); retryAfter = response.headers()['retry-after'];
@@ -122,17 +124,33 @@ if (mode === 'benchmark') {
       const data = JSON.parse(text);
       delete manifest.pendingRequest;
       if (status !== 200 || !data.factGuard || data.factGuard.fallback) {
+        const attempted = data.factGuard?.fallback?.attemptedCalls;
+        if (Number.isInteger(attempted) && attempted >= 0 && attempted <= reservedCalls) manifest.calls += attempted - reservedCalls;
         await save(); throw new Error(`Production generation failed (HTTP ${status}); reserved ${reservedCalls} calls conservatively.`);
       }
       manifest.calls += data.factGuard.steps.length - reservedCalls; await save();
       await record(id, input, data, text, Math.round(performance.now() - started));
       if (page) {
+        await page.locator('.guard-verdict').scrollIntoViewIfNeeded();
+        await page.screenshot({ path: resolve('media', `quality-production-${id}-guard.png`) });
+        await page.locator('.pipeline-steps').scrollIntoViewIfNeeded();
+        await page.screenshot({ path: resolve('media', `quality-production-${id}-routing.png`) });
+        if (await page.locator('.claim-diff').count()) {
+          await page.locator('.claim-diff').first().scrollIntoViewIfNeeded();
+          await page.screenshot({ path: resolve('media', `quality-production-${id}-claims.png`) });
+        }
+        await page.locator('.trace-table').last().scrollIntoViewIfNeeded();
+        await page.screenshot({ path: resolve('media', `quality-production-${id}-trace.png`) });
         await page.locator('#tab-pdp').click();
         await page.locator('#panel-pdp').scrollIntoViewIfNeeded();
         await page.screenshot({ path: resolve('media', `quality-production-${id}.png`) });
         console.log(`Real production UI captured: ${id}`);
+        const video = page.video();
+        if (video) await page.waitForTimeout(1500);
         await page.close();
+        if (video) await video.saveAs(resolve('media', `quality-production-${set}-${id}.webm`));
       }
+      if (data.factGuard.needsReview) throw new Error('Factual audit has unresolved claims; gate failed.');
     }
   } finally { await browser?.close(); }
 } else throw new Error('Use benchmark or production.');

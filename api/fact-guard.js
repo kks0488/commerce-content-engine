@@ -65,19 +65,25 @@ export function createHandler({ env = process.env, run = runFactGuard, now = Dat
       const options = { apiKey, provider: 'nebius', baseUrl: env.LLM_BASE_URL,
         draftModel: (!tournament && env.NEBIUS_COPY_MODEL) || env.NEBIUS_DRAFT_MODEL || env.LLM_MODEL || NEMOTRON_MODELS.lightning,
         verifyModel: env.NEBIUS_VERIFY_MODEL || NEMOTRON_MODELS.super, deadlineMs: 280000, maxRounds: tournament ? 2 : 1 };
-      if (!tournament) {
-        // Public clients may lower the six-call ceiling, never raise it or choose models/keys.
-        const cap = Number(req.headers['x-cce-max-calls'] ?? 6);
-        if (!Number.isInteger(cap) || cap < 2 || cap > 6) return reply(400, { error: 'Model-call ceiling must be an integer from 2 to 6.' });
-        options.maxCalls = cap;
-      }
+      // Clients may lower the ceiling; every upstream request including repairs counts.
+      const ceiling = tournament ? 48 : 6;
+      const cap = Number(req.headers['x-cce-max-calls'] ?? ceiling);
+      if (!Number.isInteger(cap) || cap < 2 || cap > ceiling) return reply(400, { error: `Model-call ceiling must be an integer from 2 to ${ceiling}.` });
+      options.maxCalls = cap;
       if (tournament) Object.assign(options, { count: body.count ?? 16, concurrency: 6,
         judgeModel: env.NEBIUS_JUDGE_MODEL || NEMOTRON_MODELS.super });
       if (tournament && active >= 2) { res.setHeader('Retry-After', '15'); return reply(429, { error: 'Two tournaments are already running. Try again shortly.' }); }
       let bundle, streaming = false;
       const controller = new AbortController();
       const completed = [];
+      const rawAttempts = [], contentErrors = [];
+      let attemptedCalls = 0;
+      if (!tournament) {
+        options.onRawOutput = output => rawAttempts.push(output);
+        options.onContentError = errors => contentErrors.push(...errors);
+      }
       options.onProgress = event => {
+        if (event.state === 'running') attemptedCalls++;
         if (event.state === 'complete' && event.usage) completed.push(event);
         if (streaming && !res.destroyed) res.write(JSON.stringify(event) + '\n');
       };
@@ -108,13 +114,15 @@ export function createHandler({ env = process.env, run = runFactGuard, now = Dat
           return reply(502, failure);
         }
         const notice = 'LIVE REQUEST FAILED · Showing offline deterministic fixtures. This result is DEMO, not live inference. Completed live calls may still incur tokens.';
-        const fallback = { from: 'live', reportedTokensBeforeFailure: completed.reduce((n, s) => n + (s.usage.total_tokens || 0), 0), usageComplete: false };
+        const fallback = { from: 'live', attemptedCalls, completedSteps: completed.slice(), rawAttempts: rawAttempts.slice(), contentErrors: contentErrors.slice(),
+          failureKind: /budget|call ceiling/i.test(error.message) ? 'call_budget' : /timed out/i.test(error.message) ? 'timeout' : contentErrors.length ? 'copy_validation' : 'provider_or_schema',
+          reportedTokensBeforeFailure: completed.reduce((n, s) => n + (s.usage.total_tokens || 0), 0), usageComplete: false };
         const annotate = result => { const report = tournament ? result : result.factGuard;
           if (report.fallback) return result;
           report.notice = `${notice} ${report.notice}`; report.fallback = fallback; return result; };
         if (streaming) res.write(JSON.stringify({ type: 'fallback', notice }) + '\n');
         bundle = annotate(await (tournament ? runTournament : runFactGuard)(input, { ...options,
-          apiKey: undefined, demo: true, onProgress: streaming ? event => {
+          apiKey: undefined, demo: true, onRawOutput: undefined, onContentError: undefined, onProgress: streaming ? event => {
             if (event.type === 'result') annotate(event.result);
             if (!res.destroyed) res.write(JSON.stringify(event) + '\n');
           } : undefined }));

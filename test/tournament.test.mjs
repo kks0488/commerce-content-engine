@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import { EventEmitter } from 'node:events';
-import { runTournament, parseVariant, variantFields, estimateCost, mapLimit } from '../src/tournament.js';
+import { runTournament, parseVariant, variantFields, estimateCost, mapLimit, guardTournamentClaims } from '../src/tournament.js';
 import { NEMOTRON_MODELS } from '../src/fact-guard.js';
 import * as tournamentApi from '../api/tournament.js';
 
@@ -13,7 +13,7 @@ const models = { draftModel: 'mock-draft', verifyModel: 'mock-verify', judgeMode
 const timeline = ['0-3s', '3-10s', '10-15s'];
 
 function draft(variation = 1) {
-  return { headline: product.product_name, hook: `Look closer, edit ${variation}.`,
+  return { headline: product.product_name, hook: `Look closer, edit ${String.fromCharCode(64 + variation)}.`,
     beats: timeline.map(time => ({ time, visual: 'Show the cup.', voiceover: 'Capacity: 500 ml.', caption: product.product_name })) };
 }
 
@@ -32,8 +32,13 @@ function mockModels({ mutateDraft, mutateReview, mutateJudge, extra = {}, delay 
     try {
       if (delay) await new Promise(resolve => setTimeout(resolve, delay));
       let content;
-      if (body.model === models.draftModel || body.model === NEMOTRON_MODELS.lightning) content = mutateDraft?.(draft(payload.variation), payload) ?? draft(payload.variation);
-      else if (payload.fields) content = mutateReview?.(review(payload), payload) ?? review(payload);
+      if (body.model === models.draftModel || body.model === NEMOTRON_MODELS.lightning) {
+        const generate = item => mutateDraft?.(draft(item.variation), item) ?? draft(item.variation);
+        content = payload.variants ? { variants: payload.variants.map(item => ({ id: item.id, ...generate(item) })) } : generate(payload);
+      } else if (payload.fields || payload.variants?.[0]?.fields) {
+        const verify = item => mutateReview?.(review(item), item) ?? review(item);
+        content = payload.variants ? { variants: payload.variants.map(item => ({ id: item.id, ...verify({ ...payload, ...item }) })) } : verify(payload);
+      }
       else content = mutateJudge?.({ winner: payload.candidates[0].id, reason: `Clearer opening for ${payload.persona.name}.` }, payload)
         ?? { winner: payload.candidates[0].id, reason: `Clearer opening for ${payload.persona.name}.` };
       return completion(content, body.model, extra);
@@ -97,13 +102,13 @@ test('mocked live models run in parallel within the chosen bound and produce a f
   const result = await runTournament(product, { apiKey: fakeKey, ...models, count: 8, concurrency: 3, fetchImpl: mock.fetchImpl });
   assert.equal(result.mode, 'live'); assert.equal(result.concurrency, 3);
   assert.equal(mock.peak, 3);
-  assert.equal(mock.calls.filter(call => call.model === models.draftModel).length, 8);
-  assert.equal(mock.calls.filter(call => call.model === models.verifyModel).length, 8);
+  assert.equal(mock.calls.filter(call => call.model === models.draftModel).length, 2);
+  assert.equal(mock.calls.filter(call => call.model === models.verifyModel).length, 2);
   assert.equal(mock.calls.filter(call => call.model === models.judgeModel).length, 7);
   assert.deepEqual(result.rounds.map(round => round.matches.length), [4, 2, 1]);
   assert.equal(result.winner.id, 'V01');
   assert.ok(result.steps.every(step => step.usageEstimated === false));
-  assert.equal(result.totals.totalTokens, 23 * usage.total_tokens);
+  assert.equal(result.totals.totalTokens, 11 * usage.total_tokens);
   assert.equal(result.totals.usageComplete, true);
   assert.equal(result.totals.costUsd, null, 'Unknown custom model pricing must remain unavailable.');
   assert.ok(new Set(result.rounds.flatMap(round => round.matches.map(match => match.persona))).size >= 3);
@@ -114,7 +119,7 @@ test('runtime concurrency clamps to eight and default is six', async () => {
   for (const [requested, expected] of [[undefined, 6], [99, 8], [-1, 1]]) {
     const mock = mockModels({ delay: 1 });
     const result = await runTournament(product, { apiKey: fakeKey, ...models, count: 8, concurrency: requested, fetchImpl: mock.fetchImpl });
-    assert.equal(result.concurrency, expected); assert.equal(mock.peak, expected);
+    assert.equal(result.concurrency, expected); assert.equal(mock.peak, Math.min(expected, 4));
   }
 });
 
@@ -177,7 +182,7 @@ test('verbose but valid judgment reasons are bounded without discarding a verifi
 test('cost estimates use actual per-model usage and explicitly expose missing usage', async () => {
   const mock = mockModels();
   const result = await runTournament(product, { apiKey: fakeKey, count: 4, fetchImpl: mock.fetchImpl });
-  const expected = 4 * estimateCost(NEMOTRON_MODELS.lightning, usage) + 7 * estimateCost(NEMOTRON_MODELS.super, usage);
+  const expected = estimateCost(NEMOTRON_MODELS.lightning, usage) + 4 * estimateCost(NEMOTRON_MODELS.super, usage);
   assert.ok(Math.abs(result.totals.costUsd - expected) < 1e-12);
   assert.ok(result.totals.allLargeCostUsd > result.totals.costUsd);
   assert.ok(result.totals.estimatedSavingsUsd > 0);
@@ -319,7 +324,10 @@ test('streaming live failure restarts explicit demo fixtures and preserves repor
   const result = events.at(-1).result;
   assert.equal(result.mode, 'demo'); assert.equal(result.variants.length, 4);
   assert.match(result.notice, /LIVE REQUEST FAILED.*DEMO/);
-  assert.deepEqual(result.fallback, { from: 'live', reportedTokensBeforeFailure: 250, usageComplete: false });
+  assert.equal(result.fallback.from, 'live');
+  assert.equal(result.fallback.reportedTokensBeforeFailure, 250);
+  assert.equal(result.fallback.usageComplete, false);
+  assert.equal(result.fallback.attemptedCalls, 1);
   assert.ok(result.steps.every(step => step.usageEstimated));
   assert.equal(res.writableEnded, true); assert.equal(res.listenerCount('close'), 0);
 });
@@ -353,5 +361,108 @@ test('placeholder tournament creatives get exactly one repair before the fact ga
   assert.ok(result.winner); assert.doesNotMatch(JSON.stringify(result.variants), /needs info/);
   const bad = mockModels({ mutateDraft: value => ({ ...value, hook: '[확인 필요]' }) });
   await assert.rejects(runTournament(product, { apiKey: fakeKey, count: 2, ...models, fetchImpl: bad.fetchImpl }), /Invalid variant text/);
-  assert.equal(bad.calls.filter(call => call.model === models.draftModel).length, 4);
+  assert.equal(bad.calls.filter(call => call.model === models.draftModel).length, 2);
+});
+
+
+test('sixteen live variants use four real draft batches, four audits and fifteen pairwise judgments', async () => {
+  const mock = mockModels(), events = [];
+  const result = await runTournament(product, { apiKey: fakeKey, ...models, count: 16, maxCalls: 23,
+    fetchImpl: mock.fetchImpl, onProgress: event => events.push(event) });
+  assert.equal(mock.calls.length, 23);
+  assert.deepEqual(result.stages.map(stage => stage.calls), [4, 4, 15]);
+  assert.deepEqual(result.rounds.map(round => round.matches.length), [8, 4, 2, 1]);
+  assert.equal(events.filter(event => event.type === 'variant').length, 16);
+  assert.equal(events.filter(event => event.type === 'verified').length, 16);
+  assert.equal(new Set(result.variants.map(variant => variant.hook)).size, 16);
+  for (const call of mock.calls.filter(call => call.payload.variants)) {
+    assert.equal(call.payload.variants.length, 4);
+    assert.equal(call.response_format.type, 'json_schema');
+    assert.equal(call.response_format.json_schema.strict, true);
+  }
+  assert.ok(result.variants.every(variant => variant.eligible && variant.claims.length === 14));
+});
+
+test('live call cap includes failed attempts and cannot be escaped by content repair', async () => {
+  const malformed = mockModels({ mutateDraft: value => ({ ...value, hook: '[needs info]' }) });
+  await assert.rejects(runTournament(product, { apiKey: fakeKey, ...models, count: 16, maxCalls: 1,
+    fetchImpl: malformed.fetchImpl }), /live-call budget/);
+  assert.equal(malformed.calls.length, 1);
+  const mock = mockModels();
+  await assert.rejects(runTournament(product, { apiKey: fakeKey, ...models, count: 4, maxCalls: 2,
+    fetchImpl: mock.fetchImpl }), /live-call budget/);
+  assert.equal(mock.calls.length, 2);
+  for (const maxCalls of [0, -1, 1.5, '3']) await assert.rejects(runTournament(product, { maxCalls }), /positive integer/);
+});
+
+test('duplicate or missing live batch ids fail closed before any tournament judgment', async () => {
+  for (const corruptStage of ['generate', 'verify']) {
+    const mock = mockModels();
+    const fetchImpl = async (url, request) => {
+      const body = JSON.parse(request.body), response = await mock.fetchImpl(url, request);
+      if (body.model !== models[corruptStage === 'generate' ? 'draftModel' : 'verifyModel']) return response;
+      const envelope = JSON.parse(await response.text()), content = JSON.parse(envelope.choices[0].message.content);
+      content.variants[1].id = content.variants[0].id;
+      return completion(content, body.model);
+    };
+    await assert.rejects(runTournament(product, { apiKey: fakeKey, ...models, count: 4, fetchImpl }), /Invalid variant batch/);
+    assert.equal(mock.calls.filter(call => call.model === models.judgeModel).length, 0);
+  }
+});
+
+test('publication guard rejects model-approved invented mechanisms, tactile claims and absolutes before judging', async () => {
+  const observedFailures = [
+    'Show the lid clicking off.', 'Unscrew the lid for a refill.', 'Slide the lid open.',
+    'A button releases the lid.', 'Feel the smooth steel body.', 'Wide mouth fits all.',
+    'All-day hydration starts here.', 'The lid fits perfectly.', 'Quick clean, back to your desk.',
+    'Open the gift box.', 'Durable stainless steel build.',
+  ];
+  const input = { ...product, product_info: product.product_info + '\nRemovable lid.\nWide opening.\nFinish: matte cream.\nUnknowns: click, screw, slide and button mechanism; smooth texture; gift box.' };
+  for (const invented of observedFailures) {
+    const mock = mockModels({ mutateDraft: (value, payload) => payload.variation === 1 ? {
+      ...value, beats: value.beats.map((beat, i) => i === 0 ? { ...beat, visual: invented } : beat),
+    } : value });
+    const result = await runTournament(input, { apiKey: fakeKey, ...models, count: 2, fetchImpl: mock.fetchImpl });
+    assert.equal(result.variants[0].eligible, false, invented);
+    const flagged = result.variants[0].claims.find(claim => claim.path === 'beats.0.visual');
+    assert.match(flagged.reason, /Publication guard:/, invented);
+    assert.equal(flagged.factual, true); assert.deepEqual(flagged.sources, []);
+    assert.equal(result.winner.id, 'V02'); assert.equal(result.totals.largeJudgeCalls, 0);
+  }
+});
+
+test('publication guard allows ordinary filling, plain removal, visual matte finish and sourced mechanisms', () => {
+  const row = claim => ({ path: 'beats.0.visual', claim, factual: false, status: 'supported', sources: [], reason: 'Creative staging.' });
+  const facts = [{ id: 'F1', text: 'Removable lid.' }, { id: 'F2', text: 'Finish: matte cream.' }, { id: 'F3', text: 'Wide opening.' }];
+  for (const claim of ['Remove the lid and fill the cup.', 'Show the matte cream finish.', 'Fill the wide opening with water.', 'A smooth camera pan across the cup.', 'Click to shop the cup.', 'Remove the lid. Click to shop.', 'Easy clean']) {
+    assert.equal(guardTournamentClaims([row(claim)], facts)[0].status, 'supported', claim);
+  }
+  const supported = [
+    ['Unscrew the lid.', 'Screw-on lid.'], ['Show the lid clicking off.', 'Click-off lid.'],
+    ['Slide the lid open.', 'Sliding lid.'], ['Press the button to open the lid.', 'Button-release lid.'],
+    ['Feel the smooth steel body.', 'Smooth steel body.'], ['Open the gift box.', 'Gift box included.'],
+  ];
+  for (const [claim, fact] of supported) {
+    assert.equal(guardTournamentClaims([row(claim)], [...facts, { id: 'F4', text: fact }])[0].status, 'supported', claim);
+  }
+  for (const unknown of ['Unknown: smooth steel body.', 'Smooth steel body: not specified.', 'No evidence of a smooth steel body.']) {
+    assert.equal(guardTournamentClaims([row('Feel the smooth steel body.')], [{ id: 'F4', text: unknown }])[0].status, 'unsupported', unknown);
+  }
+});
+
+test('publication headline limits count characters including spaces and punctuation exactly', () => {
+  const row = claim => ({ path: 'headline', claim, factual: false, status: 'supported', sources: [], reason: 'Creative hook.' });
+  for (const [language, limit, character] of [['English', 40, 'x'], ['Korean', 25, '가']]) {
+    assert.equal(guardTournamentClaims([row(character.repeat(limit))], [], language)[0].status, 'supported');
+    const rejected = guardTournamentClaims([row(character.repeat(limit) + '!')], [], language)[0];
+    assert.equal(rejected.status, 'unsupported'); assert.match(rejected.reason, /Headline exceeds/);
+  }
+});
+
+test('publication guard rejects invented countdowns while preserving supplied volume', () => {
+  const row = claim => ({ path: 'headline', claim, factual: false, status: 'supported', sources: [], reason: 'Creative hook.' });
+  const facts = [{ id: 'F1', text: 'Capacity: 500 ml.' }];
+  assert.equal(guardTournamentClaims([row('Steel cup ready in 3')], facts)[0].status, 'unsupported');
+  assert.equal(guardTournamentClaims([row('500 ml for your desk')], facts)[0].status, 'supported');
+  assert.equal(guardTournamentClaims([row('24 hours of heat')], [...facts, { id: 'F2', text: '24-hour heat retention: unknown.' }])[0].status, 'unsupported');
 });

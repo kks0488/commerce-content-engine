@@ -37,9 +37,11 @@ test('CLI fetches URL, merges overrides, generates via compatible API and explai
     else if (req.url === '/v1/chat/completions') {
       let body = ''; for await (const part of req) body += part;
       received = JSON.parse(body);
-      const fixture = JSON.parse(received.messages[1].content).language === 'English'
+      const english = JSON.parse(received.messages[1].content).language === 'English';
+      const fixture = english
         ? JSON.parse(JSON.stringify(DEMO_BUNDLE), (_key, value) => typeof value === 'string' && /[가-힣]/.test(value)
-          ? (value.startsWith('#') ? '#TestCup' : 'Test cup facts.') : value) : DEMO_BUNDLE;
+          ? (value.startsWith('#') ? '#TestCup' : 'Test cup facts.') : value) : structuredClone(DEMO_BUNDLE);
+      fixture.ads.bodies = fixture.ads.bodies.map(body => body + (english ? ' View the product photos and add to cart.' : ' 사진을 보고 장바구니에 담아 보세요.'));
       res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(fixture) } }] }));
     } else { res.statusCode = 404; res.end('Not found'); }
   });

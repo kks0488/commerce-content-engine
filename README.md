@@ -21,14 +21,16 @@ Set `NEBIUS_API_KEY` in your environment for live generation. `LLM_API_KEY`, `LL
 
 ```mermaid
 flowchart LR
-  Facts --> Draft[Generate copy] --> Validate[Validate and retry once] --> Bundle[Editable bundle]
-  Bundle --> Guard[Optional fact review] --> Export[Markdown / JSON]
+  Facts --> Draft[Nemotron writes] --> Guard[Super checks claims]
+  Guard --> Revise[Revise flagged copy] --> Guard
+  Guard --> Export[Bundle + source trace]
+  Facts --> Variants[Nemotron drafts ads in batches] --> Gate[Super checks each ad] --> Tournament[Simulated buyer tournament]
 ```
 
 **Nemotron on Nebius**
 
-- The hosted bundle uses DeepSeek V4.1 Flash for writing and Nemotron Super for factual review on Nebius Token Factory, with strict JSON Schema. Original Korean/English examples guide benefit framing; length, claim, completeness and caveat checks trigger one model repair. Unknowns stay in seller listing checks.
-- On the hosted branch, Nemotron Super reviews factual claims; the tournament gates ads before simulated buyer comparisons.
+- The hosted bundle uses Nemotron Super for writing and factual review on Nebius Token Factory, with strict JSON Schema and bounded repairs. Korean/English guidance connects supplied facts to use moments; unknowns belong in seller listing checks.
+- The tournament drafts and audits ads in batches of four, then compares eligible ads with Super and simulated buyer personas. Lightning drafting is supported; production currently selects Super for writing quality. Model calls, tokens and latency are visible; preferences are not customer research.
 - Built during the hackathon: CLI, browser editor, Fact Guard, tournament, hosted demo and real-response regression checks. Accepted model JSON is preserved without FAQ replacement. AI review uses seller facts and still needs editorial judgment.
 
 MIT © 2026 Kyoungsoo Kim. See [LICENSE](LICENSE).
