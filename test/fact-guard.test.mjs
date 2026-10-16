@@ -217,3 +217,14 @@ test('Fact Guard rejects repeated incomplete drafts instead of manufacturing pla
   } }), /Invalid content bundle at ads/);
   assert.equal(calls, 2);
 });
+
+test('live Fact Guard replaces missing FAQ slots with known labeled source facts before auditing', async () => {
+  const result = await runFactGuard(input, { apiKey: fakeKey, maxRounds: 0, fetchImpl: async (_url, init) => {
+    const body = JSON.parse(init.body), payload = JSON.parse(body.messages[1].content);
+    if (payload.fields) return response(reviewer(payload.fields, payload.facts), body.model);
+    const bundle = content(); bundle.pdp.faq[0] = { question: 'Is it leakproof?', answer: '[needs info] Tested leak resistance is not supplied.' };
+    return response(bundle, body.model);
+  } });
+  assert.equal(result.pdp.faq[0].answer, '500 ml.');
+  assert.doesNotMatch(JSON.stringify(result.pdp.faq), /needs info/);
+});

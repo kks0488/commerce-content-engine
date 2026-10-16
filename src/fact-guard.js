@@ -1,5 +1,5 @@
 // Dependency-free agent pipeline shared by the browser, CLI and serverless route.
-import { normalizeInput, buildMessages, parseBundle, callLLM, computeMargin, jsonObject, BUNDLE_JSON_SCHEMA, withContentRetry } from './core.js';
+import { normalizeInput, buildMessages, parseBundle, callLLM, computeMargin, jsonObject, BUNDLE_JSON_SCHEMA, withContentRetry, groundKnownFaq } from './core.js';
 
 export const NEMOTRON_MODELS = Object.freeze({
   lightning: 'nvidia/Nemotron-3_5-Lightning',
@@ -164,7 +164,7 @@ export async function runFactGuard(raw, options = {}) {
     return withContentRetry((issue, attempt) => step(name, round,
       attempt && /lightning/i.test(draftModel) ? verifyModel : draftModel,
       { ...prompt, system: prompt.system + (issue ? `\nPrevious output failed: ${issue} Return the full bundle, grounded only in source facts.` : '') }, fixture),
-      parseBundle, options);
+      text => mode === 'live' ? groundKnownFaq(parseBundle(text), input) : parseBundle(text), options);
   }
   let bundle = await generate('draft', 0, messages, () => demoBundle(input, facts));
   const before = structuredClone(bundle);
